@@ -90,9 +90,7 @@ void usb_cdc_init()
 	crs_autotrim_usb_enable();
 	rcc_set_usbclk_source(RCC_PLL);
 
-	// Remap pins PA11/PA12
 	rcc_periph_clock_enable(RCC_SYSCFG_COMP);
-	SYSCFG_CFGR1 |= SYSCFG_CFGR1_PA11_PA12_RMP;
 
 	// reset USB peripheral
 	rcc_periph_reset_pulse(RST_USB);
