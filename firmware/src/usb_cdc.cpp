@@ -88,7 +88,7 @@ void usb_cdc_init()
 	rcc_periph_clock_enable(USB_PORT_RCC);
 
 	crs_autotrim_usb_enable();
-	rcc_set_usbclk_source(RCC_PLL);
+	rcc_set_usbclk_source(RCC_HSI48);
 
 	rcc_periph_clock_enable(RCC_SYSCFG_COMP);
 
