@@ -1,10 +1,10 @@
 /*
  * USB Serial
- * 
+ *
  * Copyright (c) 2020 Manuel Bleichenbacher
  * Licensed under MIT License
  * https://opensource.org/licenses/MIT
- * 
+ *
  * USB serial implementation
  */
 
@@ -23,6 +23,9 @@
 
 constexpr int RX_USB_BUF_SIZE = 2 * CDCACM_PACKET_SIZE;
 constexpr int TX_USB_BUF_SIZE = 2 * CDCACM_PACKET_SIZE;
+constexpr uint32_t MIN_BAUD_RATE = 1200;
+constexpr uint32_t MAX_BAUD_RATE = 6000000;
+constexpr uint32_t LINUX_6M_BAUD_ALIAS = 75;
 
 static void usb_data_out_cb(qsb_device *dev, uint8_t ep, uint32_t len);
 static void usb_data_in_cb(qsb_device *dev, uint8_t ep, uint32_t len);
@@ -83,7 +86,7 @@ bool usb_serial_impl::is_connected()
 void usb_serial_impl::poll()
 {
     usb_cdc_poll();
-    
+
     uart.poll();
 
     if (!usb_cdc_is_connected())
@@ -163,6 +166,15 @@ void usb_serial_impl::get_line_coding(qsb_pstn_line_coding *line_coding)
 
 bool usb_serial_impl::set_line_coding(qsb_pstn_line_coding *line_coding)
 {
+    uint32_t baudrate = line_coding->dwDTERate;
+
+    // Hack to work around Linux not easily allowing baud rates over 4M.
+    if (baudrate == LINUX_6M_BAUD_ALIAS) {
+        baudrate = 6000000;
+    }
+
+    if (baudrate < MIN_BAUD_RATE || baudrate > MAX_BAUD_RATE)
+        goto invalid_param;
     if (line_coding->bCharFormat > 2)
         goto invalid_param;
     if (line_coding->bParityType > 2)
@@ -178,11 +190,11 @@ bool usb_serial_impl::set_line_coding(qsb_pstn_line_coding *line_coding)
     }
 
     uart.set_coding(
-        line_coding->dwDTERate,
+        (int)baudrate,
         line_coding->bDataBits,
         (uart_stopbits)line_coding->bCharFormat,
         (uart_parity)line_coding->bParityType);
-    
+
     return true;
 
 invalid_param:

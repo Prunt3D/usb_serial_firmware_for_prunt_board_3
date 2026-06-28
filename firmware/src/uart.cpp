@@ -276,10 +276,6 @@ void uart_impl::set_coding(int baudrate, int databits, uart_stopbits stopbits, u
 
     usart_disable(USART);
 
-    // Hack to work around Linux not easily allowing baud rates over 4M.
-    if (baudrate == 75) {
-        baudrate = 6000000;
-    }
     set_baudrate(baudrate);
 
     usart_set_databits(USART, _databits + p);
