@@ -39,6 +39,8 @@ void uart_impl::enable()
     tx_buf_head = tx_buf_tail = 0;
     tx_size = 0;
     rx_buf_tail = 0;
+    last_rx_size = 0;
+    rx_overrun_occurred = false;
 
     // configure TX DMA
     rcc_periph_clock_enable(USART_DMA_RCC);
@@ -230,9 +232,14 @@ void uart_impl::check_rx_overrun()
         // overrun detected
         // clear error condition by discarding data
         rx_buf_tail = UART_RX_BUF_LEN - dma_get_number_of_data(USART_DMA, USART_DMA_RX_CHAN);
+        if (rx_buf_tail == UART_RX_BUF_LEN)
+            rx_buf_tail = 0;
         last_rx_size = 0;
         rx_overrun_occurred = true;
+        return;
     }
+
+    last_rx_size = len;
 }
 
 bool uart_impl::has_rx_overrun_occurred()
