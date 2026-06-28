@@ -37,8 +37,6 @@ int main()
 	qsb_serial_num_init();
 	usb_serial.init();
 
-	bool connected = false;
-
 	while (1)
 	{
 		usb_serial.poll();
