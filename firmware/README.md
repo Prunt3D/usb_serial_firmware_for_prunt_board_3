@@ -37,6 +37,19 @@ pio run -t upload
 An ST-Link adapter (except the lastet V3 series) can provide sufficient power to the USB-to-Serial adapter for programming it.
 
 
+## Entering the system bootloader
+
+On STM32F0 builds, the firmware exposes a vendor-specific control request that erases the first user-flash page and resets the MCU. This leaves the first word at `0x08000000` erased, which selects the STM32 system memory bootloader on parts with the empty-check boot path.
+
+Send a control transfer to endpoint 0 with:
+
+- `bmRequestType = 0x40` (vendor, device, host-to-device)
+- `bRequest = 0x51`
+- `wValue = 0xb007`
+- `wIndex = 0xa53b`
+- no data stage
+
+
 ## Documentation
 
 - [What you need to know about USB and the STM32 USB peripheral](../doc/usb-facts.md)

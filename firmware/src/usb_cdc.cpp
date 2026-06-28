@@ -1,14 +1,15 @@
 /*
  * USB Serial
- * 
+ *
  * Copyright (c) 2020 Manuel Bleichenbacher
  * Licensed under MIT License
  * https://opensource.org/licenses/MIT
- * 
+ *
  * USB CDC Implementation
  */
 
 #include "common.h"
+#include "bootloader.h"
 #include "hardware.h"
 #include "usb_cdc.h"
 #include "usb_conf.h"
@@ -23,6 +24,47 @@
 qsb_device *usb_device;
 
 static uint16_t configured;
+
+static constexpr uint8_t VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER = 0x51;
+static constexpr uint16_t VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER_VALUE = 0xb007;
+static constexpr uint16_t VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER_INDEX = 0xa53b;
+
+static void bootloader_reset_control_completed(
+	__attribute__((unused)) qsb_device *dev,
+	__attribute__((unused)) qsb_setup_data *req)
+{
+	bootloader_enter_system_memory_boot_mode();
+}
+
+// Process vendor requests on control endpoint
+static enum qsb_request_return_code vendor_control_request(
+	__attribute__((unused)) qsb_device *dev,
+	qsb_setup_data *req, __attribute__((unused)) uint8_t **buf, uint16_t *len,
+	qsb_dev_control_completion_callback_fn *complete)
+{
+	if (req->bRequest != VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER)
+		return QSB_REQ_NEXT_HANDLER;
+
+	if (req->bmRequestType != (QSB_REQ_TYPE_OUT | QSB_REQ_TYPE_VENDOR | QSB_REQ_TYPE_DEVICE))
+		return QSB_REQ_NOTSUPP;
+
+	if (req->wValue != VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER_VALUE ||
+		req->wIndex != VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER_INDEX ||
+		req->wLength != 0 ||
+		*len != 0)
+		return QSB_REQ_NOTSUPP;
+
+	*complete = bootloader_reset_control_completed;
+	return QSB_REQ_HANDLED;
+}
+
+static void register_vendor_control_request(qsb_device *dev)
+{
+	qsb_dev_register_control_callback(dev,
+								   QSB_REQ_TYPE_VENDOR    | QSB_REQ_TYPE_DEVICE,
+								   QSB_REQ_TYPE_TYPE_MASK | QSB_REQ_TYPE_RECIPIENT_MASK,
+								   vendor_control_request);
+}
 
 // Process ACM requests on control endpoint
 static enum qsb_request_return_code cdc_control_request(
@@ -40,7 +82,7 @@ static enum qsb_request_return_code cdc_control_request(
 			return QSB_REQ_NOTSUPP;
 
 		return usb_serial.set_line_coding((qsb_pstn_line_coding *)*buf) ? QSB_REQ_HANDLED : QSB_REQ_NOTSUPP;
-		
+
 
 	case QSB_PSTN_REQ_GET_LINE_CODING:
 		if (*len < sizeof(qsb_pstn_line_coding))
@@ -73,6 +115,7 @@ static void cdc_set_config(qsb_device *dev, uint16_t wValue)
 								   QSB_REQ_TYPE_CLASS     | QSB_REQ_TYPE_INTERFACE,
 								   QSB_REQ_TYPE_TYPE_MASK | QSB_REQ_TYPE_RECIPIENT_MASK,
 								   cdc_control_request);
+	register_vendor_control_request(dev);
 
 	// Serial interface
 	usb_serial.on_usb_configured();
@@ -102,6 +145,7 @@ void usb_cdc_init()
 
 	// create USB device
 	usb_device = usb_conf_init();
+	register_vendor_control_request(usb_device);
 
 	// Set callback for config calls
 	qsb_dev_register_set_config_callback(usb_device, cdc_set_config);
