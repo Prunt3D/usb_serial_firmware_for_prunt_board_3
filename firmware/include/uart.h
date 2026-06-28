@@ -31,6 +31,13 @@ enum class uart_parity
     even = 2,
 };
 
+enum class uart_error : uint16_t
+{
+    framing = 0x10,
+    parity = 0x20,
+    overrun = 0x40,
+};
+
 
 /**
  * @brief UART implementation
@@ -87,6 +94,16 @@ public:
      * @return `true` if overrun occurred.
      */
     bool has_rx_overrun_occurred();
+
+    /**
+     * Gets and clears pending UART hardware/software error flags.
+     *
+     * The returned bits use the same values as the USB CDC PSTN
+     * serial-state error bits.
+     *
+     * @return bitwise OR of `uart_error` values
+     */
+    uint16_t take_errors();
 
     /**
      * @brief Returns the available space in the transmit buffer
@@ -150,6 +167,9 @@ private:
      */
     void check_rx_overrun();
 
+    /// Checks for USART hardware receive errors and clears the peripheral flags.
+    void check_usart_errors();
+
     /**
      * @brief Sets the baudrate
      *
@@ -207,7 +227,7 @@ private:
 
     bool is_transmitting;
     bool is_enabled;
-    bool rx_overrun_occurred;
+    uint16_t pending_errors;
 };
 
 /// Global UART instance

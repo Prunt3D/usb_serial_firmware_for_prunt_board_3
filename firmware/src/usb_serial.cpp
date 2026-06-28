@@ -94,9 +94,11 @@ void usb_serial_impl::poll()
 
     update_nak();
 
-    // Check for RX buffer overrun
-    if (uart.has_rx_overrun_occurred()) {
-        on_interrupt_occurred(usb_serial_interrupt::data_overrun);
+    // Check for UART receive errors.
+    uint16_t uart_errors = uart.take_errors();
+    if (uart_errors != 0) {
+        pending_interrupt |= uart_errors;
+        send_serial_state();
         return;
     }
 

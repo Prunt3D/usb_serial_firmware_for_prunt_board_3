@@ -40,7 +40,7 @@ void uart_impl::enable()
     tx_size = 0;
     rx_buf_tail = 0;
     last_rx_size = 0;
-    rx_overrun_occurred = false;
+    pending_errors = 0;
 
     // configure TX DMA
     rcc_periph_clock_enable(USART_DMA_RCC);
@@ -89,6 +89,7 @@ void uart_impl::poll()
     start_transmission();
 
     // RX side
+    check_usart_errors();
     check_rx_overrun();
 }
 
@@ -235,22 +236,59 @@ void uart_impl::check_rx_overrun()
         if (rx_buf_tail == UART_RX_BUF_LEN)
             rx_buf_tail = 0;
         last_rx_size = 0;
-        rx_overrun_occurred = true;
+        pending_errors |= (uint16_t)uart_error::overrun;
         return;
     }
 
     last_rx_size = len;
 }
 
+void uart_impl::check_usart_errors()
+{
+    uint32_t status = USART_ISR(USART);
+    uint32_t clear_flags = 0;
+
+    if ((status & USART_ISR_ORE) != 0) {
+        pending_errors |= (uint16_t)uart_error::overrun;
+        clear_flags |= USART_ICR_ORECF;
+    }
+
+    if ((status & USART_ISR_PE) != 0) {
+        pending_errors |= (uint16_t)uart_error::parity;
+        clear_flags |= USART_ICR_PECF;
+    }
+
+    if ((status & USART_ISR_FE) != 0) {
+        pending_errors |= (uint16_t)uart_error::framing;
+        clear_flags |= USART_ICR_FECF;
+    }
+
+    if ((status & USART_ISR_NF) != 0) {
+        // USB CDC has no separate noise bit; report it as receive framing damage.
+        pending_errors |= (uint16_t)uart_error::framing;
+        clear_flags |= USART_ICR_NCF;
+    }
+
+    if (clear_flags != 0)
+        USART_ICR(USART) = clear_flags;
+}
+
 bool uart_impl::has_rx_overrun_occurred()
 {
-    if (rx_overrun_occurred)
+    if ((pending_errors & (uint16_t)uart_error::overrun) != 0)
     {
-        rx_overrun_occurred = false;
+        pending_errors &= ~(uint16_t)uart_error::overrun;
         return true;
     }
 
     return false;
+}
+
+uint16_t uart_impl::take_errors()
+{
+    uint16_t errors = pending_errors;
+    pending_errors = 0;
+    return errors;
 }
 
 size_t uart_impl::tx_data_avail() {
