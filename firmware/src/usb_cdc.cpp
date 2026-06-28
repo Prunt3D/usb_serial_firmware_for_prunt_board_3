@@ -130,6 +130,8 @@ void usb_cdc_init()
 	rcc_periph_clock_enable(RCC_USB);
 	rcc_periph_clock_enable(USB_PORT_RCC);
 
+	rcc_osc_on(RCC_HSI48);
+	rcc_wait_for_osc_ready(RCC_HSI48);
 	crs_autotrim_usb_enable();
 	rcc_set_usbclk_source(RCC_HSI48);
 
