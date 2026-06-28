@@ -29,6 +29,11 @@ static constexpr uint8_t VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER = 0x51;
 static constexpr uint16_t VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER_VALUE = 0xb007;
 static constexpr uint16_t VENDOR_REQ_ENTER_SYSTEM_BOOTLOADER_INDEX = 0xa53b;
 
+static void usb_reset()
+{
+	configured = 0;
+}
+
 static void bootloader_reset_control_completed(
 	__attribute__((unused)) qsb_device *dev,
 	__attribute__((unused)) qsb_setup_data *req)
@@ -110,12 +115,15 @@ bool usb_cdc_is_connected()
 static void cdc_set_config(qsb_device *dev, uint16_t wValue)
 {
 	configured = wValue;
+	register_vendor_control_request(dev);
+
+	if (wValue == 0)
+		return;
 
 	qsb_dev_register_control_callback(dev,
 								   QSB_REQ_TYPE_CLASS     | QSB_REQ_TYPE_INTERFACE,
 								   QSB_REQ_TYPE_TYPE_MASK | QSB_REQ_TYPE_RECIPIENT_MASK,
 								   cdc_control_request);
-	register_vendor_control_request(dev);
 
 	// Serial interface
 	usb_serial.on_usb_configured();
@@ -148,6 +156,8 @@ void usb_cdc_init()
 	// create USB device
 	usb_device = usb_conf_init();
 	register_vendor_control_request(usb_device);
+
+	qsb_dev_register_reset_callback(usb_device, usb_reset);
 
 	// Set callback for config calls
 	qsb_dev_register_set_config_callback(usb_device, cdc_set_config);
