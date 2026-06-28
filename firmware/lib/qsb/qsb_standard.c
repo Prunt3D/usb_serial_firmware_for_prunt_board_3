@@ -238,6 +238,8 @@ static qsb_request_return_code get_descriptor(qsb_device* dev, qsb_setup_data* r
         return QSB_REQ_HANDLED;
 
     case QSB_DT_CONFIGURATION:
+        if (descr_idx >= dev->desc->bNumConfigurations)
+            return QSB_REQ_NOTSUPP;
         *len = imin(*len, build_config_descriptor(dev, descr_idx, *buf));
         return QSB_REQ_HANDLED;
 
