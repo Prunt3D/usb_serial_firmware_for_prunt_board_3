@@ -1,10 +1,10 @@
 /*
  * USB Serial
- * 
+ *
  * Copyright (c) 2020 Manuel Bleichenbacher
  * Licensed under MIT License
  * https://opensource.org/licenses/MIT
- * 
+ *
  * UART interface
  */
 
@@ -13,7 +13,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define UART_TX_BUF_LEN 1024
+#define UART_TX_BUF_LEN 2048
 #define UART_RX_BUF_LEN 1024
 
 enum class uart_stopbits
@@ -51,10 +51,10 @@ public:
 
     /**
      * @brief Submits the specified data for transmission.
-     * 
+     *
      * The specified data is added to the transmission
      * buffer and transmitted asynchronously.
-     * 
+     *
      * @param data pointer to byte array
      * @param len length of byte array
      */
@@ -62,9 +62,9 @@ public:
 
     /**
      * @brief Copies data from the receive buffer into the specified array.
-     * 
+     *
      * The copied data is removed from the buffer.
-     * 
+     *
      * @param data pointer to byte array
      * @param len length of the byte array
      * @return number of bytes copied to the byte array
@@ -73,62 +73,62 @@ public:
 
     /**
      * @brief Returns the length of received data in the receive buffer
-     * 
+     *
      * @return length, in number of bytes
      */
     size_t rx_data_len();
 
     /**
      * Indicates of an RX buffer overrun has occurred.
-     * 
+     *
      * This function will return `true` once for
      * each occurrence of an overrun.
-     * 
+     *
      * @return `true` if overrun occurred.
      */
     bool has_rx_overrun_occurred();
 
     /**
      * @brief Returns the available space in the transmit buffer
-     * 
+     *
      * @return space, in number of bytes
      */
     size_t tx_data_avail();
 
     /**
      * @brief Sets the line coding.
-     * 
+     *
      * @param baudrate baud rate, in bps
      * @param databits data bits per byte
      * @param stopbits length of stop period, in bits
      * @param parity type of party bit
-     */ 
+     */
     void set_coding(int baudrate, int databits, uart_stopbits stopbits, uart_parity parity);
 
     /**
      * @brief Gets the baud rate.
-     * 
+     *
      * @return baud rate, in bps
      */
     int baudrate() { return _baudrate; }
 
     /**
      * @brief Gets the data bits per byte.
-     * 
+     *
      * @return number of bits
      */
     int databits() { return _databits; }
 
     /**
      * @brief Gets the length of the stop period
-     * 
+     *
      * @return length, in bits
      */
     uart_stopbits stopbits() { return _stopbits; }
 
     /**
      * @brief Gets the type of parity bit
-     * 
+     *
      * @return parity type
      */
     uart_parity parity() { return _parity; }
@@ -142,9 +142,9 @@ private:
 
     /**
      * @brief Checks if RX buffer has been overrun.
-     * 
+     *
      * If it has been overrun, data is discarded and the error state reset.
-     * 
+     *
      * This functions must be called frequently in order to reliably detect an overrun
      * (more often than: RX buffer size * 10 bit/byte / maximum bit rate / 2)
      */
@@ -152,17 +152,17 @@ private:
 
     /**
      * @brief Sets the baudrate
-     * 
+     *
      * Uses the highest oversampling mode applicable to the baudrate.
      * Limits the baudrate if set too high.
-     * 
+     *
      * @param baud baudrate (in bps)
      */
     void set_baudrate(int baud);
 
     /**
      * Deletes the high bit of each byte.
-     * 
+     *
      * It is used to support 7 data bits.
      */
     static void clear_high_bits(uint8_t* buf, int buf_len);
