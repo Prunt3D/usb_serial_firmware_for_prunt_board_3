@@ -416,6 +416,11 @@ int qsb_dev_ep_transmit_packet(qsb_device* dev, uint8_t addr, const uint8_t* buf
     uint8_t ep = qsb_endpoint_num(addr);
     ep_state_tx_e state = dev->ep_state_tx[ep];
 
+    // Submitting a packet would end a halt, and only the host should do that. EP0 is the exception,
+    // as it still has to send the status of the request that set the halt.
+    if (ep != 0 && (USB_EP(ep) & USB_EP_STAT_TX) == USB_EP_STAT_TX_STALL)
+        return -1;
+
     if (state == sgl_buf_0_pkts) {
         // submit a single packet in single buffering mode
         len = imin(len, 64);
