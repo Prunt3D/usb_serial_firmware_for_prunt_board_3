@@ -324,6 +324,10 @@ static const uint32_t parity_enum_to_uint32[] = {
 
 void uart_impl::set_coding(int baudrate, int databits, uart_stopbits stopbits, uart_parity parity)
 {
+    // Applying a change restarts the USART, which can lose a byte being received.
+    if (baudrate == _baudrate && databits == _databits && stopbits == _stopbits && parity == _parity)
+        return;
+
     _baudrate = baudrate;
     _databits = databits;
     _stopbits = stopbits;

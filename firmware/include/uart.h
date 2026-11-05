@@ -118,7 +118,8 @@ public:
      * Data queued for transmission before this call is sent with the old settings. The new
      * settings take effect once it has all been sent, and data queued after this call waits
      * for that. The UART also keeps receiving with the old settings until then. The getters
-     * below report the new settings right away.
+     * below report the new settings right away. Asking for the settings already requested does
+     * nothing.
      *
      * @param baudrate baud rate, in bps
      * @param databits data bits per byte
