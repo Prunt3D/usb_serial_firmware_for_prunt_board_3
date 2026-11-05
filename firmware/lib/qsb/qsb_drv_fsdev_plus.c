@@ -134,11 +134,16 @@ static bool dbl_buf_has_packet_rx(qsb_device* dev, uint8_t ep)
 
 static inline void ep_callback(qsb_device* dev, uint8_t ep, uint8_t type, uint8_t offset);
 
-// Reads the waiting packets of a double-buffered RX endpoint, unless it's paused. Packets that aren't
-// read stay in their buffers, and the host gets NAK once both are full.
+// Reads the waiting packets of a double-buffered RX endpoint, unless it's paused or halted. Packets
+// that aren't read stay in their buffers. During a pause, the host gets NAK once both are full.
+// Clearing a halt drops them.
 static void dbl_buf_read_rx(qsb_device* dev, uint8_t ep)
 {
     if (dev->ep_state_rx[ep] > dbl_buf_ready_1)
+        return;
+
+    // A halt turns off DBL_BUF, which qsb_dev_ep_read_packet() goes by to find the packet.
+    if ((USB_EP(ep) & USB_EP_STAT_RX) == USB_EP_STAT_RX_STALL)
         return;
 
     // Two zero-length packets look like nothing at all. This frees them, and otherwise does nothing.

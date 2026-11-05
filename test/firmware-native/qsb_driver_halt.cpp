@@ -70,6 +70,10 @@ static void receive_setup()
 
 static void callback(qsb_device*, uint8_t, uint32_t) {}
 
+static int out_packets;
+
+static void count_out_packet(qsb_device*, uint8_t, uint32_t) { out_packets++; }
+
 int main()
 {
     qsb_device* dev = &device_fsdev;
@@ -147,6 +151,34 @@ int main()
     qsb_dev_ep_stall_set(dev, 0x01, 0);
     check("EP1: clearing a halt resets DTOG_RX to DATA0", (endpoint_registers[1].value & USB_EP_DTOG_RX) == 0);
     check("EP1: the endpoint is receiving again", stat_rx(1) == USB_EP_STAT_RX_VALID);
+
+    // A packet waiting through a pause is read at the end of it
+    qsb_dev_ep_setup(dev, 0x01, QSB_ENDPOINT_ATTR_BULK, 128, count_out_packet);
+    qsb_dev_ep_pause(dev, 0x01);
+    endpoint_registers[1].value ^= USB_EP_DTOG_RX; // as after a packet arrives
+    qsb_dev_ep_unpause(dev, 0x01);
+    check("EP1: a packet waiting through a pause is read after it", out_packets == 1);
+
+    // But not if the endpoint was halted in the meantime
+    out_packets = 0;
+    qsb_dev_ep_setup(dev, 0x01, QSB_ENDPOINT_ATTR_BULK, 128, count_out_packet);
+    qsb_dev_ep_pause(dev, 0x01);
+    endpoint_registers[1].value ^= USB_EP_DTOG_RX;
+    qsb_dev_ep_stall_set(dev, 0x01, 1);
+    qsb_dev_ep_unpause(dev, 0x01);
+    check("EP1 halted: a waiting packet isn't read", out_packets == 0);
+    check("EP1 halted: double buffering stays off", (endpoint_registers[1].value & USB_EP_KIND) == 0);
+    check("EP1 halted: the endpoint stays halted", stat_rx(1) == USB_EP_STAT_RX_STALL);
+
+    qsb_dev_ep_stall_set(dev, 0x01, 0);
+    dbl_buf_read_rx(dev, 1);
+    check("EP1: clearing the halt drops what was waiting", out_packets == 0);
+    check("EP1: the endpoint is receiving after the halt", stat_rx(1) == USB_EP_STAT_RX_VALID);
+
+    // As when CTR_RX is handled during a halt, with nothing waiting
+    qsb_dev_ep_stall_set(dev, 0x01, 1);
+    dbl_buf_read_rx(dev, 1);
+    check("EP1 halted: handling CTR_RX leaves double buffering off", (endpoint_registers[1].value & USB_EP_KIND) == 0);
 
     return check_result();
 }
