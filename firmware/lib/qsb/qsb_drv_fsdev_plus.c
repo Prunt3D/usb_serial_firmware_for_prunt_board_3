@@ -41,12 +41,8 @@ typedef enum ep_state_tx_e {
     sgl_buf_0_pkts = 0,
     /// Single buffering, 1 packet submitted
     sgl_buf_1_pkt = 1,
-    /// Double buffering enabled, no packets submitted
-    dbl_buf_en_0_pkts = 2,
-    /// Double buffering enabled, 1 packet submitted
-    dbl_buf_en_1_pkt = 3,
-    /// Double buffering enabled, 2 packets submitted
-    dbl_buf_en_2_pkts = 4
+    /// Double buffering, see `dbl_buf_queued_tx()` for the packets submitted
+    dbl_buf_en = 2
 } ep_state_tx_e;
 
 /// RX endpoint state
@@ -86,6 +82,42 @@ void qsb_internal_dev_set_address(__attribute__((unused)) qsb_device* dev, uint8
     USB_DADDR = (addr & USB_DADDR_ADDR) | USB_DADDR_EF;
 }
 
+// The number of packets queued on a double-buffered TX endpoint, from its register value.
+//
+// Counting CTR_TX events to work this out isn't reliable. CTR_TX is a single flag, and short packets
+// can complete close enough together for two of them to set it only once. Whereas after a packet
+// is sent, STAT_TX reads as NAK if DTOG_TX has reached SW_BUF_TX, and submitting a packet undoes it:
+//   - DTOG_TX and SW_BUF_TX differ: DTOG_TX points to the only packet
+//   - they're the same and STAT_TX reads as NAK: DTOG_TX caught up with SW_BUF_TX, so it's empty
+//   - they're the same and STAT_TX reads as VALID: SW_BUF_TX went all the way around, so it's full
+//
+// This also covers starting up. Flow control only starts at the end of the first transaction after
+// DBL_BUF is set, so a first packet submitted on its own would be sent, followed by the other
+// buffer, and then sent again. qsb_dev_ep_setup() leaves the endpoint looking full, with both buffers
+// empty, so nothing can be submitted until the first transaction has sent one of them. A packet
+// submitted then goes into that buffer, behind the other empty one.
+static uint8_t dbl_buf_queued_tx(uint32_t ep_reg)
+{
+    if (((ep_reg & USB_EP_DTOG_TX) != 0) != ((ep_reg & USB_EP_SW_BUF_TX) != 0))
+        return 1;
+    return (ep_reg & USB_EP_STAT_TX) == USB_EP_STAT_TX_NAK ? 0 : 2;
+}
+
+// Lifts a latched buffer conflict without changing SW_BUF_TX. Only toggling SW_BUF_TX lifts one, and
+// one left behind would make the endpoint look empty before it has started up.
+static void dbl_buf_lift_conflict_tx(uint8_t ep)
+{
+    qsb_ep_sw_buf_tx_toggle(ep);
+    qsb_ep_sw_buf_tx_toggle(ep);
+}
+
+// Lifts a latched buffer conflict without changing SW_BUF_RX. Only toggling SW_BUF_RX lifts one.
+static void dbl_buf_lift_conflict_rx(uint8_t ep)
+{
+    qsb_ep_sw_buf_rx_toggle(ep);
+    qsb_ep_sw_buf_rx_toggle(ep);
+}
+
 void qsb_dev_ep_setup(qsb_device* dev, uint8_t addr, uint32_t type, int buffer_size, qsb_dev_ep_callback_fn callback)
 {
     // Translate USB standard type codes to STM32
@@ -107,12 +139,13 @@ void qsb_dev_ep_setup(qsb_device* dev, uint8_t addr, uint32_t type, int buffer_s
     qsb_ep_set_all_rw_bits(ep, ep | typelookup[type] | (is_dbl_buf ? USB_EP_KIND_DBL_BUF : 0));
 
     if (is_tx || ep == 0) {
-        dev->ep_state_tx[ep] = is_dbl_buf ? dbl_buf_en_0_pkts : sgl_buf_0_pkts;
+        dev->ep_state_tx[ep] = is_dbl_buf ? dbl_buf_en : sgl_buf_0_pkts;
         qsb_fsdev_setup_buf_tx(ep, qsb_offset_tx, buffer_size, &dev->pm_top);
         qsb_ep_dtog_tx_clear(ep);
 
         if (is_dbl_buf) {
             qsb_ep_sw_buf_tx_clear(ep);
+            dbl_buf_lift_conflict_tx(ep);
             qsb_fsdev_setup_buf_tx(ep, qsb_offset_db1, buffer_size, &dev->pm_top);
         }
 
@@ -130,6 +163,7 @@ void qsb_dev_ep_setup(qsb_device* dev, uint8_t addr, uint32_t type, int buffer_s
         if (is_dbl_buf) {
             qsb_fsdev_setup_buf_rx(ep, qsb_offset_db0, buffer_size, &dev->pm_top);
             qsb_ep_sw_buf_rx_set(ep);
+            dbl_buf_lift_conflict_rx(ep);
         }
 
         if (ep != 0)
@@ -145,6 +179,8 @@ void qsb_internal_ep_reset(qsb_device* dev)
     for (int i = 1; i < 8; i++) {
         qsb_ep_stat_tx_set(i, USB_EP_STAT_TX_DISABLED);
         qsb_ep_stat_rx_set(i, USB_EP_STAT_RX_DISABLED);
+        // Turn double buffering off so that it starts over when qsb_dev_ep_setup() sets it again.
+        qsb_ep_set_all_rw_bits(i, i);
         dev->ep_state_rx[i] = 0;
         dev->ep_state_tx[i] = 0;
         dev->ep_outstanig_rx_acks[i] = 0;
@@ -247,13 +283,12 @@ void qsb_dev_ep_unpause(qsb_device* dev, uint8_t addr)
 uint16_t qsb_dev_ep_transmit_avail(qsb_device* dev, uint8_t addr)
 {
     uint8_t ep = qsb_endpoint_num(addr);
-    ep_state_tx_e dbl_buf_state = dev->ep_state_tx[ep];
 
-    switch (dbl_buf_state) {
-    case dbl_buf_en_0_pkts:
+    switch (dev->ep_state_tx[ep]) {
     case sgl_buf_0_pkts:
-    case dbl_buf_en_1_pkt:
         return 64;
+    case dbl_buf_en:
+        return dbl_buf_queued_tx(USB_EP(ep)) < 2 ? 64 : 0;
     default:
         return 0;
     }
@@ -271,12 +306,11 @@ int qsb_dev_ep_transmit_packet(qsb_device* dev, uint8_t addr, const uint8_t* buf
         dev->ep_state_tx[ep] = sgl_buf_1_pkt;
         qsb_ep_stat_tx_set(ep, USB_EP_STAT_TX_VALID);
 
-    } else if (state == dbl_buf_en_0_pkts || state == dbl_buf_en_1_pkt) {
+    } else if (state == dbl_buf_en && dbl_buf_queued_tx(USB_EP(ep)) < 2) {
         // submit one or two packets in double buffering mode
         uint8_t offset = (USB_EP(ep) & USB_EP_SW_BUF_TX) == 0 ? qsb_offset_db0 : qsb_offset_db1;
         len = imin(len, 64);
         qsb_fsdev_copy_to_pma(ep, offset, buf, len);
-        dev->ep_state_tx[ep] = state + 1;
         qsb_ep_sw_buf_tx_toggle(ep);
 
     } else {
@@ -336,8 +370,8 @@ void qsb_dev_poll(qsb_device* dev)
         if ((ep_reg & USB_EP_CTR_TX) != 0) {
             qsb_ep_ctr_tx_clear(ep);
 
-            if (dev->ep_state_tx[ep] != sgl_buf_0_pkts && dev->ep_state_tx[ep] != dbl_buf_en_0_pkts)
-                dev->ep_state_tx[ep]--;
+            if (dev->ep_state_tx[ep] == sgl_buf_1_pkt)
+                dev->ep_state_tx[ep] = sgl_buf_0_pkts;
 
             uint8_t offset = qsb_offset_tx;
             if ((ep_reg & USB_EP_KIND_DBL_BUF) != 0 && (ep_reg & USB_EP_SW_BUF_TX) == 0)
