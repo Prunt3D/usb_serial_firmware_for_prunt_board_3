@@ -169,8 +169,8 @@ static void fill_string_desc(const char* str, qsb_string_desc* desc, uint16_t* l
         *len = size;
     }
 
-    // copy and convert from Latin-1 to UTF-16
-    size = size / 2 - 1;
+    // copy and convert from Latin-1 to UTF-16, rounding up as an odd length ends in half a character
+    size = (size - 1) / 2;
     for (int i = 0; i < size; i++)
         desc->wData[i] = str[i];
 }
