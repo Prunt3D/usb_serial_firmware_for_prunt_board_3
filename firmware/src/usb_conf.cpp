@@ -119,7 +119,7 @@ static const qsb_interface_desc comm_if_1_desc[] = {
         .bNumEndpoints = QSB_ARRAY_SIZE(comm_ep_1_desc),
 		.bInterfaceClass = QSB_CDC_INTF_CLASS_COMM,
 		.bInterfaceSubClass = QSB_CDC_INTF_SUBCLASS_ACM,
-		.bInterfaceProtocol = QSB_CDC_INTF_PROTOCOL_AT,
+		.bInterfaceProtocol = QSB_CDC_INTF_PROTOCOL_NONE,
 		.iInterface = USB_STRINGS_COMM_1_ID,
 		.endpoint = comm_ep_1_desc,
 		.extra = &cdc_func_desc,
@@ -149,7 +149,7 @@ static const qsb_iface_assoc_desc assoc_1_desc = {
 	.bInterfaceCount = 2,
 	.bFunctionClass = QSB_CDC_INTF_CLASS_COMM,
 	.bFunctionSubClass = QSB_CDC_INTF_SUBCLASS_ACM,
-	.bFunctionProtocol = QSB_CDC_INTF_PROTOCOL_AT,
+	.bFunctionProtocol = QSB_CDC_INTF_PROTOCOL_NONE,
 	.iFunction = USB_STRINGS_SERIAL_PORT_ID,
 };
 
