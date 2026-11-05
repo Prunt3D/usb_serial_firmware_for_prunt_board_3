@@ -54,6 +54,11 @@ Use [`tools/enter-system-bootloader.c`](../tools/enter-system-bootloader.c) to s
 - no data stage
 
 
+## Testing
+
+Parts of the firmware can be tested on a computer, with no board. See [`test/firmware-native`](../test/firmware-native/README.md).
+
+
 ## Documentation
 
 - [What you need to know about USB and the STM32 USB peripheral](../doc/usb-facts.md)
