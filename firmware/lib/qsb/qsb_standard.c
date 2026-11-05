@@ -514,10 +514,43 @@ qsb_request_return_code qsb_internal_standard_request_interface(qsb_device* dev,
     return command(dev, req, buf, len);
 }
 
+/**
+ * Checks if an endpoint address from a request (wIndex) exists in the current state of the device.
+ *
+ * @param dev USB device
+ * @param addr endpoint address, including the direction bit
+ * @return `true` if it's EP0 or an endpoint of the current configuration
+ */
+static bool is_existing_endpoint(qsb_device* dev, uint16_t addr)
+{
+    if (addr == qsb_endpoint_addr_out(0) || addr == qsb_endpoint_addr_in(0))
+        return true;
+
+    if (dev->current_config == 0)
+        return false;
+
+    const qsb_config_desc* cfg = &dev->config[dev->current_config - 1];
+    for (int i = 0; i < cfg->bNumInterfaces; i++) {
+        const qsb_interface* iface = &cfg->interface[i];
+        for (int j = 0; j < iface->num_altsetting; j++) {
+            const qsb_interface_desc* altsetting = &iface->altsetting[j];
+            for (int k = 0; k < altsetting->bNumEndpoints; k++) {
+                if (altsetting->endpoint[k].bEndpointAddress == addr)
+                    return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 // Handle standard control requests for endpoints
 qsb_request_return_code qsb_internal_standard_request_endpoint(qsb_device* dev, qsb_setup_data* req, uint8_t** buf, uint16_t* len)
 {
     qsb_request_return_code (*command)(qsb_device * dev, qsb_setup_data * req, uint8_t * *buf, uint16_t * len) = NULL;
+
+    if (!is_existing_endpoint(dev, req->wIndex))
+        return QSB_REQ_NOTSUPP;
 
     switch (req->bRequest) {
     case QSB_REQ_CLEAR_FEATURE:
