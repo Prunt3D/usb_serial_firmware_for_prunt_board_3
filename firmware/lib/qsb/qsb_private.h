@@ -111,10 +111,6 @@ struct qsb_internal_device {
     uint8_t ep_state_rx[QSB_NUM_ENDPOINTS];
     uint8_t ep_state_tx[QSB_NUM_ENDPOINTS];
 
-#if defined(QSB_FSDEV_DBL_BUF)
-    uint8_t ep_outstanig_rx_acks[QSB_NUM_ENDPOINTS];
-#endif
-
 #elif QSB_ARCH == QSB_ARCH_DWC
 
     // private implementation data for the DesignWare USB core

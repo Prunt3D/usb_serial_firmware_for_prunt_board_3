@@ -107,10 +107,10 @@ static inline void qsb_ep_dtog_tx_clear(uint8_t ep)
     qsb_ep_toggle_bits(ep, 0, USB_EP_DTOG_TX);
 }
 
-/// Set the SW_BUF_RX bit
-static inline void qsb_ep_sw_buf_rx_set(uint8_t ep)
+/// Clear the SW_BUF_RX bit
+static inline void qsb_ep_sw_buf_rx_clear(uint8_t ep)
 {
-    qsb_ep_toggle_bits(ep, USB_EP_SW_BUF_RX, USB_EP_SW_BUF_RX);
+    qsb_ep_toggle_bits(ep, 0, USB_EP_SW_BUF_RX);
 }
 
 /// Clear the SW_BUF_TX bit

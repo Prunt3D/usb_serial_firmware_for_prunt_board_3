@@ -83,6 +83,12 @@ uint32_t qsb_fsdev_get_len(uint8_t ep, qsb_buf_desc_offset offset)
     return desc->count & 0x3ff;
 }
 
+void qsb_fsdev_clear_rx_len(uint8_t ep, qsb_buf_desc_offset offset)
+{
+    buf_desc* desc = get_buf_desc(ep, offset);
+    desc->count &= ~0x3ff;
+}
+
 void qsb_fsdev_copy_to_pma(uint8_t ep, qsb_buf_desc_offset offset, const uint8_t* buf, uint32_t len)
 {
     buf_desc* desc = get_buf_desc(ep, offset);

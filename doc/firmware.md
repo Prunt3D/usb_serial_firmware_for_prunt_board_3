@@ -34,7 +34,7 @@ The UART side has no flow control: the Prunt Board 3 only connects TX and RX, so
 
 ### USB-to-serial path
 
-When the transmission ring buffer is becoming full, the USB *data out* endpoint is paused, i.e. it stops accepting packets and the host's polls get NAK. This tells the host that the device is currently unable to accept more data. The endpoint is paused when less than two packets of space remain, as with double buffering one more packet can still arrive. It's unpaused once there's room again.
+When the transmission ring buffer is becoming full, the USB *data out* endpoint is paused, i.e. the firmware stops reading packets from it. Its two PMA buffers fill up, and the host's further packets then get NAK. This tells the host that the device is currently unable to accept more data. The endpoint is paused when less than two packets of space remain, and it's unpaused once there's room again.
 
 ### Serial-to-USB path
 

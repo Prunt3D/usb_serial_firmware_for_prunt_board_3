@@ -118,6 +118,42 @@ static void dbl_buf_lift_conflict_rx(uint8_t ep)
     qsb_ep_sw_buf_rx_toggle(ep);
 }
 
+// Tells if a double-buffered RX endpoint has a packet waiting to be read.
+//
+// A single CTR_RX flag can't count them, as two short packets can arrive before it's handled. DTOG_RX
+// toggles for each packet received, and the low bit of the driver's state for each one read, so if
+// they differ, the next buffer holds a packet. If they're the same, either both buffers are free or
+// both are full, and unlike STAT_TX, STAT_RX doesn't show the difference. So the count of received
+// bytes is cleared after reading each buffer, leaving it non-zero only in a buffer not yet read.
+static bool dbl_buf_has_packet_rx(qsb_device* dev, uint8_t ep)
+{
+    if (((USB_EP(ep) & USB_EP_DTOG_RX) != 0) != ((dev->ep_state_rx[ep] & 1) != 0))
+        return true;
+    return qsb_fsdev_get_len(ep, qsb_offset_db0) != 0 || qsb_fsdev_get_len(ep, qsb_offset_db1) != 0;
+}
+
+static inline void ep_callback(qsb_device* dev, uint8_t ep, uint8_t type, uint8_t offset);
+
+// Reads the waiting packets of a double-buffered RX endpoint, unless it's paused. Packets that aren't
+// read stay in their buffers, and the host gets NAK once both are full.
+static void dbl_buf_read_rx(qsb_device* dev, uint8_t ep)
+{
+    if (dev->ep_state_rx[ep] > dbl_buf_ready_1)
+        return;
+
+    // Two zero-length packets look like nothing at all. This frees them, and otherwise does nothing.
+    if (!dbl_buf_has_packet_rx(dev, ep))
+        dbl_buf_lift_conflict_rx(ep);
+
+    while (dev->ep_state_rx[ep] <= dbl_buf_ready_1 && dbl_buf_has_packet_rx(dev, ep)) {
+        uint8_t offset = dev->ep_state_rx[ep] & 1;
+        ep_callback(dev, ep, QSB_TRANSACTION_OUT, offset);
+        qsb_fsdev_clear_rx_len(ep, offset);
+        qsb_ep_sw_buf_rx_toggle(ep);
+        dev->ep_state_rx[ep] ^= 1;
+    }
+}
+
 void qsb_dev_ep_setup(qsb_device* dev, uint8_t addr, uint32_t type, int buffer_size, qsb_dev_ep_callback_fn callback)
 {
     // Translate USB standard type codes to STM32
@@ -162,7 +198,8 @@ void qsb_dev_ep_setup(qsb_device* dev, uint8_t addr, uint32_t type, int buffer_s
 
         if (is_dbl_buf) {
             qsb_fsdev_setup_buf_rx(ep, qsb_offset_db0, buffer_size, &dev->pm_top);
-            qsb_ep_sw_buf_rx_set(ep);
+            // With DTOG_RX and SW_BUF_RX the same, the hardware has both buffers to receive into.
+            qsb_ep_sw_buf_rx_clear(ep);
             dbl_buf_lift_conflict_rx(ep);
         }
 
@@ -183,7 +220,6 @@ void qsb_internal_ep_reset(qsb_device* dev)
         qsb_ep_set_all_rw_bits(i, i);
         dev->ep_state_rx[i] = 0;
         dev->ep_state_tx[i] = 0;
-        dev->ep_outstanig_rx_acks[i] = 0;
     }
     dev->pm_top = PM_TOP_INIT + 2 * dev->desc->bMaxPacketSize0;
 }
@@ -235,10 +271,11 @@ static void restart_dbl_buf_rx(qsb_device* dev, uint8_t ep)
     qsb_ep_set_rw_bits_and_stat(ep, ep | USB_EP_TYPE_BULK, dbl_buf_stat_rx(ep), USB_EP_STAT_RX_DISABLED);
     qsb_ep_ctr_rx_clear(ep);
     qsb_ep_dtog_rx_clear(ep);
-    qsb_ep_sw_buf_rx_set(ep);
+    qsb_ep_sw_buf_rx_clear(ep);
     dbl_buf_lift_conflict_rx(ep);
+    qsb_fsdev_clear_rx_len(ep, qsb_offset_db0);
+    qsb_fsdev_clear_rx_len(ep, qsb_offset_db1);
     dev->ep_state_rx[ep] = dev->ep_state_rx[ep] >= dbl_buf_paused_0 ? dbl_buf_paused_0 : dbl_buf_ready_0;
-    dev->ep_outstanig_rx_acks[ep] = 0;
 
     qsb_ep_set_all_rw_bits(ep, ep | USB_EP_TYPE_BULK | USB_EP_KIND_DBL_BUF);
     qsb_ep_stat_rx_set(ep, USB_EP_STAT_RX_VALID);
@@ -348,10 +385,9 @@ void qsb_dev_ep_unpause(qsb_device* dev, uint8_t addr)
     case dbl_buf_paused_0:
     case dbl_buf_paused_1:
         dev->ep_state_rx[ep] -= 2;
-        while (dev->ep_outstanig_rx_acks[ep] > 0) {
-            qsb_ep_sw_buf_rx_toggle(ep);
-            dev->ep_outstanig_rx_acks[ep] -= 1;
-        }
+        // Their CTR_RX has already been cleared, so read what arrived during the pause.
+        if (dev->active_ep_callback != addr)
+            dbl_buf_read_rx(dev, ep);
         break;
     }
 }
@@ -479,21 +515,13 @@ void qsb_dev_poll(qsb_device* dev)
             // Regular OUT transfer
             } else {
                 qsb_ep_ctr_rx_clear(ep);
-                uint8_t offset = qsb_offset_rx;
-                if ((ep_reg & USB_EP_KIND_DBL_BUF) != 0)
-                    offset = dev->ep_state_rx[ep] & 1;
 
-                ep_callback(dev, ep, QSB_TRANSACTION_OUT, offset);
-
-                ep_state_rx_e rx_state = dev->ep_state_rx[ep];
-                if (rx_state == sgl_buf_ready) {
-                    qsb_ep_stat_rx_set(ep, USB_EP_STAT_RX_VALID);
-                } else if (rx_state >= dbl_buf_ready_0 && rx_state <= dbl_buf_paused_1) {
-                    if (rx_state <= dbl_buf_ready_1)
-                        qsb_ep_sw_buf_rx_toggle(ep);
-                    else
-                        dev->ep_outstanig_rx_acks[ep] += 1;
-                    dev->ep_state_rx[ep] ^= 1;
+                if (dev->ep_state_rx[ep] >= dbl_buf_ready_0) {
+                    dbl_buf_read_rx(dev, ep);
+                } else {
+                    ep_callback(dev, ep, QSB_TRANSACTION_OUT, qsb_offset_rx);
+                    if (dev->ep_state_rx[ep] == sgl_buf_ready)
+                        qsb_ep_stat_rx_set(ep, USB_EP_STAT_RX_VALID);
                 }
             }
         }

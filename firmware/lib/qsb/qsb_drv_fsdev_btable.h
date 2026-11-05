@@ -51,6 +51,14 @@ void qsb_fsdev_setup_buf_tx(uint8_t ep, qsb_buf_desc_offset offset, uint32_t siz
 uint32_t qsb_fsdev_get_len(uint8_t ep, qsb_buf_desc_offset offset);
 
 /**
+ * Sets the length of the received data to 0, keeping the size of the buffer.
+ *
+ * @param ep Endpoint address without direction bit
+ * @param offset Offset within buffer descriptor table (0 or 1)
+ */
+void qsb_fsdev_clear_rx_len(uint8_t ep, qsb_buf_desc_offset offset);
+
+/**
  * Copy a data buffer to USB packet memory.
  *
  * @param ep Endpoint address without direction bit (target)
