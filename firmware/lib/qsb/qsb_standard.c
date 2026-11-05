@@ -342,6 +342,10 @@ static qsb_request_return_code get_configuration(
 static qsb_request_return_code set_interface(
     qsb_device* dev, qsb_setup_data* req, __attribute__((unused)) uint8_t** buf, uint16_t* len)
 {
+    // No interfaces exist until the device is configured.
+    if (dev->current_config == 0)
+        return QSB_REQ_NOTSUPP;
+
     const qsb_config_desc* cfx = &dev->config[dev->current_config - 1];
 
     if (req->wIndex >= cfx->bNumInterfaces)
@@ -369,6 +373,10 @@ static qsb_request_return_code set_interface(
 // get the current alternative interface setting
 static qsb_request_return_code get_interface(qsb_device* dev, qsb_setup_data* req, uint8_t** buf, uint16_t* len)
 {
+    // No interfaces exist until the device is configured.
+    if (dev->current_config == 0)
+        return QSB_REQ_NOTSUPP;
+
     const qsb_config_desc* cfx = &dev->config[dev->current_config - 1];
 
     if (req->wIndex >= cfx->bNumInterfaces)
