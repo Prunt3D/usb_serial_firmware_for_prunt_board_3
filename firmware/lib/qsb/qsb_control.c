@@ -136,9 +136,10 @@ static qsb_request_return_code dispatch_request(qsb_device* dev, qsb_setup_data*
  */
 static void handle_request_no_data(qsb_device* dev, qsb_setup_data* req)
 {
-    // prepare buffer for response
+    // Prepare buffer for response. The host chooses wLength, so limit it to the buffer in case
+    // a handler accepts the request without setting the length of its response.
     dev->control_state.ctrl_buf = dev->ctrl_buf;
-    dev->control_state.ctrl_len = req->wLength;
+    dev->control_state.ctrl_len = imin(req->wLength, dev->ctrl_buf_len);
 
     if (dispatch_request(dev, req)) {
         // successfully handled

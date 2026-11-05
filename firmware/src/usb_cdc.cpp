@@ -83,10 +83,12 @@ static enum qsb_request_return_code cdc_control_request(
 	qsb_setup_data *req, uint8_t **buf, uint16_t *len,
 	__attribute__((unused)) qsb_dev_control_completion_callback_fn *complete)
 {
+	const bool is_in = (req->bmRequestType & QSB_REQ_TYPE_DIRECTION_MASK) == QSB_REQ_TYPE_IN;
+
 	switch (req->bRequest)
 	{
 	case QSB_PSTN_REQ_SET_LINE_CODING:
-		if (*len < sizeof(qsb_pstn_line_coding))
+		if (is_in || *len < sizeof(qsb_pstn_line_coding))
 			return QSB_REQ_NOTSUPP;
 
 		if (req->wIndex != 0)
@@ -96,7 +98,7 @@ static enum qsb_request_return_code cdc_control_request(
 
 
 	case QSB_PSTN_REQ_GET_LINE_CODING:
-		if (*len < sizeof(qsb_pstn_line_coding))
+		if (!is_in || *len < sizeof(qsb_pstn_line_coding))
 			return QSB_REQ_NOTSUPP;
 
 		if (req->wIndex != 0)
@@ -107,6 +109,10 @@ static enum qsb_request_return_code cdc_control_request(
 		return QSB_REQ_HANDLED;
 
 	case QSB_PSTN_REQ_SET_CONTROL_LINE_STATE:
+		// The direction bit only matters if there's a data stage.
+		if (is_in && req->wLength != 0)
+			return QSB_REQ_NOTSUPP;
+
 		usb_serial.set_control_line_state(req->wValue);
 		return QSB_REQ_HANDLED;
 	}

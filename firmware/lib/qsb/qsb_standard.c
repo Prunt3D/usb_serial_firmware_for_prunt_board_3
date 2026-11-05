@@ -596,6 +596,15 @@ qsb_request_return_code qsb_internal_standard_request(qsb_device* dev, qsb_setup
     if ((req->bmRequestType & QSB_REQ_TYPE_TYPE_MASK) != QSB_REQ_TYPE_STANDARD)
         return QSB_REQ_NOTSUPP;
 
+    // A request with a data stage in the wrong direction is malformed. Accepting a "set" request
+    // as IN would send a data stage that the handler never filled in. Without a data stage, the
+    // direction bit doesn't mean anything (USB 2.0, 9.3.1).
+    bool is_read = req->bRequest == QSB_REQ_GET_STATUS || req->bRequest == QSB_REQ_GET_DESCRIPTOR
+        || req->bRequest == QSB_REQ_GET_CONFIGURATION || req->bRequest == QSB_REQ_GET_INTERFACE;
+    bool is_in = (req->bmRequestType & QSB_REQ_TYPE_DIRECTION_MASK) == QSB_REQ_TYPE_IN;
+    if (req->wLength != 0 && is_read != is_in)
+        return QSB_REQ_NOTSUPP;
+
     // dispatch by type
     switch (req->bmRequestType & QSB_REQ_TYPE_RECIPIENT_MASK) {
     case QSB_REQ_TYPE_DEVICE:
