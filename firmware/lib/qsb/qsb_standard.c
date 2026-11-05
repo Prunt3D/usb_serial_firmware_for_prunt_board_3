@@ -411,8 +411,15 @@ static qsb_request_return_code device_get_status(
 
 // get interface status (always returns 0)
 static qsb_request_return_code interface_get_status(
-    __attribute__((unused)) qsb_device* dev, __attribute__((unused)) qsb_setup_data* req, uint8_t** buf, uint16_t* len)
+    qsb_device* dev, qsb_setup_data* req, uint8_t** buf, uint16_t* len)
 {
+    // No interfaces exist until the device is configured.
+    if (dev->current_config == 0)
+        return QSB_REQ_NOTSUPP;
+
+    if (req->wIndex >= dev->config[dev->current_config - 1].bNumInterfaces)
+        return QSB_REQ_NOTSUPP;
+
     if (*len > 2)
         *len = 2;
     (*buf)[0] = 0;
