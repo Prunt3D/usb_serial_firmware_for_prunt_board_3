@@ -115,6 +115,10 @@ public:
     /**
      * @brief Sets the line coding.
      *
+     * Data queued for transmission before this call is sent with the old settings. The new
+     * settings take effect once it has all been sent, and data queued after this call waits
+     * for that. The getters below report the new settings right away.
+     *
      * @param baudrate baud rate, in bps
      * @param databits data bits per byte
      * @param stopbits length of stop period, in bits
@@ -170,6 +174,12 @@ private:
     /// Checks for USART hardware receive errors and clears the peripheral flags.
     void check_usart_errors();
 
+    /// Applies a pending line coding change once the data queued before it has been sent.
+    void apply_pending_coding();
+
+    /// Applies the current line coding to the USART, cutting off anything being sent.
+    void apply_coding();
+
     /**
      * @brief Sets the baudrate
      *
@@ -201,6 +211,12 @@ private:
 
     // The number of bytes currently being transmitted
     int tx_size;
+
+    // The line coding fields below have been changed, but the USART doesn't use them yet.
+    bool is_coding_change_pending;
+    // The value of `tx_buf_head` when the line coding was changed. Data before this
+    // position is sent with the old settings and data after it with the new ones.
+    int coding_change_tx_pos;
 
     // Buffer of data received via UART
     //  *  0 <= head < buf_len

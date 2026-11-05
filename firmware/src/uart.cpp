@@ -69,6 +69,7 @@ void uart_impl::enable()
 
     // configure baud rate etc.
     set_coding(9600, 8, uart_stopbits::_1_0, uart_parity::none);
+    apply_coding();
     usart_set_mode(USART, USART_MODE_TX_RX);
     usart_set_flow_control(USART, USART_FLOWCONTROL_NONE);
 
@@ -86,6 +87,7 @@ void uart_impl::poll()
 
     // TX side
     poll_tx_complete();
+    apply_pending_coding();
     start_transmission();
 
     // RX side
@@ -130,12 +132,14 @@ void uart_impl::transmit(const uint8_t *data, size_t len)
 
 void uart_impl::start_transmission()
 {
-    if (is_transmitting || tx_buf_head == tx_buf_tail)
-        return; // UART busy or queue empty
+    // With a line coding change pending, only send what was queued before it.
+    int end_pos = is_coding_change_pending ? coding_change_tx_pos : tx_buf_head;
+
+    if (is_transmitting || end_pos == tx_buf_tail)
+        return; // UART busy or nothing to send
 
     // Determine TX chunk size
     int start_pos = tx_buf_tail;
-    int end_pos = tx_buf_head;
     if (end_pos <= start_pos)
         end_pos = UART_TX_BUF_LEN;
     tx_size = end_pos - start_pos;
@@ -314,14 +318,38 @@ static const uint32_t parity_enum_to_uint32[] = {
 
 void uart_impl::set_coding(int baudrate, int databits, uart_stopbits stopbits, uart_parity parity)
 {
+    _baudrate = baudrate;
     _databits = databits;
     _stopbits = stopbits;
     _parity = parity;
-    int p = parity == uart_parity::none ? 0 : 1;
+
+    // Everything queued so far was written for the old settings. If several changes arrive
+    // before the queue drains, only the last one takes effect, once its queue has drained.
+    coding_change_tx_pos = tx_buf_head;
+    is_coding_change_pending = true;
+}
+
+void uart_impl::apply_pending_coding()
+{
+    if (!is_coding_change_pending || is_transmitting || tx_buf_tail != coding_change_tx_pos)
+        return;
+
+    // The DMA transfer finishes when the last byte enters the USART, not when it has been sent.
+    if ((USART_ISR(USART) & USART_ISR_TC) == 0)
+        return;
+
+    apply_coding();
+}
+
+void uart_impl::apply_coding()
+{
+    is_coding_change_pending = false;
+
+    int p = _parity == uart_parity::none ? 0 : 1;
 
     usart_disable(USART);
 
-    set_baudrate(baudrate);
+    set_baudrate(_baudrate);
 
     usart_set_databits(USART, _databits + p);
     usart_set_stopbits(USART, stopbits_enum_to_uint32[(int)_stopbits]);
@@ -329,7 +357,7 @@ void uart_impl::set_coding(int baudrate, int databits, uart_stopbits stopbits, u
     usart_enable(USART);
 
     // High water mark is buffer size - 5ms worth of data
-    rx_high_water_mark = std::max(UART_RX_BUF_LEN - baudrate / 2000, 0);
+    rx_high_water_mark = std::max(UART_RX_BUF_LEN - _baudrate / 2000, 0);
 }
 
 void uart_impl::set_baudrate(int baud)
