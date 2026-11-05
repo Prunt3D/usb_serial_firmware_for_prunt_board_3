@@ -53,8 +53,8 @@ static inline void qsb_ep_toggle_bits(uint8_t ep, uint32_t val, uint32_t mask)
 /**
  * Set endpoints bits with RW behavior.
  *
- * All bits with RW behavior are affected. The CTR bits are cleared.
- * All other bits are unaffected.
+ * All bits with RW behavior are affected. All other bits, including
+ * the CTR bits, are unaffected.
  *
  * @param ep endpoint
  * @param val new value
