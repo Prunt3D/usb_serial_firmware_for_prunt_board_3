@@ -117,7 +117,8 @@ public:
      *
      * Data queued for transmission before this call is sent with the old settings. The new
      * settings take effect once it has all been sent, and data queued after this call waits
-     * for that. The getters below report the new settings right away.
+     * for that. The UART also keeps receiving with the old settings until then. The getters
+     * below report the new settings right away.
      *
      * @param baudrate baud rate, in bps
      * @param databits data bits per byte
@@ -237,6 +238,11 @@ private:
     int _databits;
     uart_stopbits _stopbits;
     uart_parity _parity;
+
+    // The data bits per byte that the USART is using. `_databits` changes as soon as the host asks,
+    // which is right for data queued from then on, but the USART keeps receiving with the old
+    // settings until the change is applied.
+    int usart_databits;
 
     int rx_high_water_mark;
     int tx_max_chunk_size;

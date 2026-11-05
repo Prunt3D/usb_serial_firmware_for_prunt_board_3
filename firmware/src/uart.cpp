@@ -197,7 +197,7 @@ size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
         // chunk between tail and end of buffer
         n1 = std::min((int)len, UART_RX_BUF_LEN - rx_buf_tail);
         memcpy(data, rx_buf + rx_buf_tail, n1);
-        if (_databits == 7)
+        if (usart_databits == 7)
             clear_high_bits(data, n1);
         rx_buf_tail += n1;
         if (rx_buf_tail >= UART_RX_BUF_LEN)
@@ -216,7 +216,7 @@ size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
         // chunk between tail and head (no wrap around)
         n2 = std::min((int)len, buf_head - rx_buf_tail);
         memcpy(data, rx_buf + rx_buf_tail, n2);
-        if (_databits == 7)
+        if (usart_databits == 7)
             clear_high_bits(data, n2);
         rx_buf_tail += n2;
         last_rx_size -= n2;
@@ -350,6 +350,7 @@ void uart_impl::apply_pending_coding()
 void uart_impl::apply_coding()
 {
     is_coding_change_pending = false;
+    usart_databits = _databits;
 
     int p = _parity == uart_parity::none ? 0 : 1;
 
