@@ -176,6 +176,9 @@ void uart_impl::poll_tx_complete()
 
 size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
 {
+    // Copying replaces last_rx_size, which is the only evidence of an overrun since the last check.
+    check_rx_overrun();
+
     int buf_head = UART_RX_BUF_LEN - dma_get_number_of_data(USART_DMA, USART_DMA_RX_CHAN);
     if (buf_head == UART_RX_BUF_LEN)
         buf_head = 0;
