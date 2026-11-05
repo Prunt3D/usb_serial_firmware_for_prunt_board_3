@@ -24,11 +24,17 @@ The default environment is `genericSTM32F042C6`, the MCU on the Prunt Board 3. `
 
 ## Uploading the firmware
 
-The Prunt Board 3 has no SWD connection to the STM32F042, so the firmware is updated over USB using the DFU mode of the STM32 system bootloader. [Enter the system bootloader](#entering-the-system-bootloader), then flash with [dfu-util](https://dfu-util.sourceforge.net/):
+The Prunt Board 3 has no SWD connection to the STM32F042, so the firmware is updated over USB using the DFU mode of the STM32 system bootloader. [Enter the system bootloader](#entering-the-system-bootloader), then flash with [dfu-util](https://dfu-util.sourceforge.net/), writing the first 1 KB page last:
 
 ```
-dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D .pio/build/genericSTM32F042C6/firmware.bin
+cd .pio/build/genericSTM32F042C6
+dd if=firmware.bin of=firmware-rest.bin bs=1024 skip=1
+dd if=firmware.bin of=firmware-page0.bin bs=1024 count=1
+dfu-util -d 0483:df11 -a 0 -s 0x08000400 -D firmware-rest.bin
+dfu-util -d 0483:df11 -a 0 -s 0x08000000:leave -D firmware-page0.bin
 ```
+
+The order matters because the MCU only starts the system bootloader while the first page is erased. If flashing stops before that page is written, the board stays in the bootloader and you can flash it again. If the first page were written first, an interrupted update would leave a partial image that the MCU starts instead, with no way back over USB.
 
 dfu-util can report an error (exit code 74) as the device leaves DFU mode. This is harmless.
 
