@@ -18,7 +18,7 @@
 #include <libopencm3/stm32/dma.h>
 #include <libopencm3/stm32/rcc.h>
 
-#define TX_HOLDBACK_MAX_TIME 3  // max time to hold back data for transmission (in milliseconds)
+#define TX_HOLDBACK_MAX_TIME 1  // max time to hold back data for transmission (in milliseconds)
 #define TX_HOLDBACK_MAX_LEN 16  // max number of bytes to hold back data for transmission
 
 constexpr int RX_USB_BUF_SIZE = 2 * CDCACM_PACKET_SIZE;
