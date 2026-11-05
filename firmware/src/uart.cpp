@@ -31,6 +31,9 @@ void uart_impl::init()
     gpio_set(USART_PORT, USART_TX_GPIO);
     gpio_set_af(USART_PORT, GPIO_AF1, USART_TX_GPIO | USART_RX_GPIO);
     gpio_mode_setup(USART_PORT, GPIO_MODE_AF, GPIO_PUPD_PULLUP, USART_TX_GPIO | USART_RX_GPIO);
+
+    // 6 Mbaud can toggle TX at 3 MHz, and the speed setting it resets to is only rated for 2 MHz.
+    gpio_set_output_options(USART_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_MED, USART_TX_GPIO);
 }
 
 void uart_impl::enable()
