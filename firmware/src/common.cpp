@@ -28,9 +28,15 @@ void delay(uint32_t ms)
 
 void common_init()
 {
-	// Initialize SysTick
+	// Run from HSI48 because CRS trims it to the host's USB SOF packets, whereas HSI drifts with
+	// temperature. The USART uses this clock too, and its baud rate is only as accurate as the clock.
+	rcc_clock_setup_in_hsi48_out_48mhz();
 
-	rcc_clock_setup_in_hsi_out_48mhz();
+	// Erasing flash for bootloader entry needs HSI, even though nothing runs from it now.
+	rcc_osc_on(RCC_HSI);
+	rcc_wait_for_osc_ready(RCC_HSI);
+
+	// Initialize SysTick
 
 	// Interrupt every 1ms
 	systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
