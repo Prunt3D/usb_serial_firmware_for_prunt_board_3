@@ -83,6 +83,11 @@ static enum qsb_request_return_code cdc_control_request(
 	qsb_setup_data *req, uint8_t **buf, uint16_t *len,
 	__attribute__((unused)) qsb_dev_control_completion_callback_fn *complete)
 {
+	// This handler stays registered through a USB reset, but no interfaces exist until the device is
+	// configured again.
+	if (configured == 0)
+		return QSB_REQ_NOTSUPP;
+
 	const bool is_in = (req->bmRequestType & QSB_REQ_TYPE_DIRECTION_MASK) == QSB_REQ_TYPE_IN;
 
 	switch (req->bRequest)

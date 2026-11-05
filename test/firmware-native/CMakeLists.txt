@@ -41,6 +41,9 @@ target_include_directories(uart_line_coding PRIVATE ${UART_INCLUDES})
 add_firmware_test(usb_serial_state usb_serial_state.cpp)
 target_include_directories(usb_serial_state PRIVATE ${UART_INCLUDES} ${FIRMWARE}/lib/qsb ${LIBOPENCM3_INCLUDE})
 
+add_firmware_test(usb_cdc_requests usb_cdc_requests.cpp)
+target_include_directories(usb_cdc_requests PRIVATE ${UART_INCLUDES} ${FIRMWARE}/lib/qsb ${LIBOPENCM3_INCLUDE})
+
 # Tests of the USB stack, which only needs libopencm3's headers
 add_firmware_test(qsb_driver_halt qsb_driver_halt.cpp)
 target_include_directories(qsb_driver_halt PRIVATE ${FIRMWARE}/lib/qsb ${LIBOPENCM3_INCLUDE})

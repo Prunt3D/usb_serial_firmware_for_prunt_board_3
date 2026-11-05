@@ -7,12 +7,16 @@
 #define GPIO10 2
 #define GPIO12 4
 #define GPIO_AF1 1
+#define GPIO_MODE_INPUT 0
+#define GPIO_MODE_OUTPUT 1
 #define GPIO_MODE_AF 2
+#define GPIO_PUPD_NONE 0
 #define GPIO_PUPD_PULLUP 1
 #define GPIO_OTYPE_PP 0
 #define GPIO_OSPEED_MED 1
 
 static inline void gpio_set(int, int) {}
+static inline void gpio_clear(int, int) {}
 static inline void gpio_set_af(int, int, int) {}
 static inline void gpio_mode_setup(int, int, int, int) {}
 static inline void gpio_set_output_options(int, int, int, int) {}
