@@ -69,6 +69,20 @@ static inline void qsb_ep_set_all_rw_bits(uint8_t ep, uint32_t val)
     USB_EP(ep) = reg;
 }
 
+/**
+ * Sets all bits with RW behavior and the status of an endpoint in a single write, for when
+ * reading the status can't be trusted because of double buffering.
+ *
+ * @param ep endpoint
+ * @param rw_bits new value of the bits with RW behavior
+ * @param cur_stat actual RX or TX status
+ * @param new_stat new RX or TX status
+ */
+static inline void qsb_ep_set_rw_bits_and_stat(uint8_t ep, uint32_t rw_bits, uint32_t cur_stat, uint32_t new_stat)
+{
+    USB_EP(ep) = rw_bits | USB_EP_W0_BITS_MSK | (cur_stat ^ new_stat);
+}
+
 /// Set endpoint RX status to specified value
 static inline void qsb_ep_stat_rx_set(uint8_t ep, uint32_t stat)
 {

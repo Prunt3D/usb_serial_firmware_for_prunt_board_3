@@ -188,20 +188,96 @@ void qsb_internal_ep_reset(qsb_device* dev)
     dev->pm_top = PM_TOP_INIT + 2 * dev->desc->bMaxPacketSize0;
 }
 
-void qsb_dev_ep_stall_set(__attribute__((unused)) qsb_device* dev, uint8_t addr, uint8_t stall)
+// The actual TX status of a double-buffered endpoint. VALID reads as NAK during a buffer conflict,
+// and it's never really NAK.
+static uint32_t dbl_buf_stat_tx(uint8_t ep)
 {
-    // TODO: support for double buffering
+    uint32_t stat = USB_EP(ep) & USB_EP_STAT_TX;
+    return stat == USB_EP_STAT_TX_NAK ? USB_EP_STAT_TX_VALID : stat;
+}
+
+// The actual RX status of a double-buffered endpoint. VALID reads as NAK during a buffer conflict,
+// and it's never really NAK, as pausing works by not releasing the buffer.
+static uint32_t dbl_buf_stat_rx(uint8_t ep)
+{
+    uint32_t stat = USB_EP(ep) & USB_EP_STAT_RX;
+    return stat == USB_EP_STAT_RX_NAK ? USB_EP_STAT_RX_VALID : stat;
+}
+
+/**
+ * Restarts a double-buffered TX endpoint at DATA0, dropping any queued packets.
+ *
+ * DTOG selects both the packet ID and the buffer, so resetting it can't keep the queue. This
+ * leaves the endpoint in the same state as `qsb_dev_ep_setup()`.
+ */
+static void restart_dbl_buf_tx(qsb_device* dev, uint8_t ep)
+{
+    qsb_ep_set_rw_bits_and_stat(ep, ep | USB_EP_TYPE_BULK, dbl_buf_stat_tx(ep), USB_EP_STAT_TX_DISABLED);
+    qsb_ep_ctr_tx_clear(ep);
+    qsb_ep_dtog_tx_clear(ep);
+    qsb_ep_sw_buf_tx_clear(ep);
+    dbl_buf_lift_conflict_tx(ep);
+    qsb_fsdev_copy_to_pma(ep, qsb_offset_db0, NULL, 0);
+    qsb_fsdev_copy_to_pma(ep, qsb_offset_db1, NULL, 0);
+
+    qsb_ep_set_all_rw_bits(ep, ep | USB_EP_TYPE_BULK | USB_EP_KIND_DBL_BUF);
+    qsb_ep_stat_tx_set(ep, USB_EP_STAT_TX_VALID);
+}
+
+/**
+ * Restarts a double-buffered RX endpoint at DATA0, dropping any packet not yet read.
+ *
+ * Flow control stays paused if it was. This leaves the endpoint in the same state as
+ * `qsb_dev_ep_setup()`.
+ */
+static void restart_dbl_buf_rx(qsb_device* dev, uint8_t ep)
+{
+    qsb_ep_set_rw_bits_and_stat(ep, ep | USB_EP_TYPE_BULK, dbl_buf_stat_rx(ep), USB_EP_STAT_RX_DISABLED);
+    qsb_ep_ctr_rx_clear(ep);
+    qsb_ep_dtog_rx_clear(ep);
+    qsb_ep_sw_buf_rx_set(ep);
+    dbl_buf_lift_conflict_rx(ep);
+    dev->ep_state_rx[ep] = dev->ep_state_rx[ep] >= dbl_buf_paused_0 ? dbl_buf_paused_0 : dbl_buf_ready_0;
+    dev->ep_outstanig_rx_acks[ep] = 0;
+
+    qsb_ep_set_all_rw_bits(ep, ep | USB_EP_TYPE_BULK | USB_EP_KIND_DBL_BUF);
+    qsb_ep_stat_rx_set(ep, USB_EP_STAT_RX_VALID);
+}
+
+void qsb_dev_ep_stall_set(qsb_device* dev, uint8_t addr, uint8_t stall)
+{
     if (addr == 0)
         qsb_ep_stat_tx_set(0, stall ? USB_EP_STAT_TX_STALL : USB_EP_STAT_TX_NAK);
 
     bool is_tx = qsb_endpoint_is_tx(addr);
     uint8_t ep = qsb_endpoint_num(addr);
+
+    // With double buffering, STAT_RX and STAT_TX can't be trusted when read (see qsb_fsdev_ep.h),
+    // and double buffering isn't needed during a stall.
+    if (is_tx && dev->ep_state_tx[ep] == dbl_buf_en) {
+        if (stall)
+            qsb_ep_set_rw_bits_and_stat(ep, ep | USB_EP_TYPE_BULK, dbl_buf_stat_tx(ep), USB_EP_STAT_TX_STALL);
+        else
+            restart_dbl_buf_tx(dev, ep);
+        return;
+    }
+
+    if (!is_tx && dev->ep_state_rx[ep] >= dbl_buf_ready_0) {
+        if (stall)
+            qsb_ep_set_rw_bits_and_stat(ep, ep | USB_EP_TYPE_BULK, dbl_buf_stat_rx(ep), USB_EP_STAT_RX_STALL);
+        else
+            restart_dbl_buf_rx(dev, ep);
+        return;
+    }
+
     if (is_tx) {
         qsb_ep_stat_tx_set(ep, stall ? USB_EP_STAT_TX_STALL : USB_EP_STAT_TX_NAK);
 
-        // Reset to DATA0 if clearing stall condition
-        if (!stall)
+        // Reset to DATA0 if clearing stall condition, and forget any packet that was queued
+        if (!stall) {
             qsb_ep_dtog_tx_clear(ep);
+            dev->ep_state_tx[ep] = sgl_buf_0_pkts;
+        }
 
     } else {
         // Reset to DATA0 if clearing stall condition
@@ -283,12 +359,17 @@ void qsb_dev_ep_unpause(qsb_device* dev, uint8_t addr)
 uint16_t qsb_dev_ep_transmit_avail(qsb_device* dev, uint8_t addr)
 {
     uint8_t ep = qsb_endpoint_num(addr);
+    uint32_t ep_reg = USB_EP(ep);
+
+    // During a halt, the caller should keep its data, as clearing the halt drops queued packets.
+    if ((ep_reg & USB_EP_STAT_TX) == USB_EP_STAT_TX_STALL)
+        return 0;
 
     switch (dev->ep_state_tx[ep]) {
     case sgl_buf_0_pkts:
         return 64;
     case dbl_buf_en:
-        return dbl_buf_queued_tx(USB_EP(ep)) < 2 ? 64 : 0;
+        return dbl_buf_queued_tx(ep_reg) < 2 ? 64 : 0;
     default:
         return 0;
     }

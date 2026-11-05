@@ -362,6 +362,12 @@ static qsb_request_return_code set_interface(
         return QSB_REQ_NOTSUPP;
     }
 
+    // Selecting a setting clears any halt and resets the data toggles of its endpoints. The host
+    // resets its side, so a toggle left at DATA1 here would lose the next packet.
+    const qsb_interface_desc* altsetting = &iface->altsetting[req->wValue];
+    for (int i = 0; i < altsetting->bNumEndpoints; i++)
+        qsb_dev_ep_stall_set(dev, altsetting->endpoint[i].bEndpointAddress, 0);
+
     if (dev->user_callback_set_altsetting)
         dev->user_callback_set_altsetting(dev, req->wIndex, req->wValue);
 
