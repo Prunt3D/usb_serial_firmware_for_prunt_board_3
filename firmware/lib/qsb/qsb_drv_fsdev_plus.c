@@ -330,12 +330,34 @@ void qsb_dev_poll(qsb_device* dev)
         uint8_t ep = istr & USB_ISTR_EP_ID;
         uint32_t ep_reg = USB_EP(ep);
 
+        // correct TX transfer
+        // It goes before RX because when both are pending on EP0, the IN transaction
+        // came first: the host only sends a SETUP or status OUT packet after it.
+        if ((ep_reg & USB_EP_CTR_TX) != 0) {
+            qsb_ep_ctr_tx_clear(ep);
+
+            if (dev->ep_state_tx[ep] != sgl_buf_0_pkts && dev->ep_state_tx[ep] != dbl_buf_en_0_pkts)
+                dev->ep_state_tx[ep]--;
+
+            uint8_t offset = qsb_offset_tx;
+            if ((ep_reg & USB_EP_KIND_DBL_BUF) != 0 && (ep_reg & USB_EP_SW_BUF_TX) == 0)
+                offset = qsb_offset_db1;
+            ep_callback(dev, ep, QSB_TRANSACTION_IN, offset);
+        }
+
         // correct RX transfer
         if ((ep_reg & USB_EP_CTR_RX) != 0) {
             
             // SETUP transfer
             if ((ep_reg & USB_EP_SETUP) != 0) {
                 qsb_ep_ctr_rx_clear(0);
+
+                // A SETUP packet ends any control transfer in progress, even if the host never
+                // collected the IN packet still queued for it. Without dropping that packet
+                // here, EP0 could never send again.
+                dev->ep_state_tx[0] = sgl_buf_0_pkts;
+                qsb_ep_stat_tx_set(0, USB_EP_STAT_TX_NAK);
+
                 ep_callback(dev, 0, QSB_TRANSACTION_SETUP, qsb_offset_rx);
                 qsb_ep_stat_rx_set(0, USB_EP_STAT_RX_VALID);
             
@@ -359,19 +381,6 @@ void qsb_dev_poll(qsb_device* dev)
                     dev->ep_state_rx[ep] ^= 1;
                 }
             }
-        }        
-
-        // correct TX transfer
-        if ((ep_reg & USB_EP_CTR_TX) != 0) {
-            qsb_ep_ctr_tx_clear(ep);
-
-            if (dev->ep_state_tx[ep] != sgl_buf_0_pkts && dev->ep_state_tx[ep] != dbl_buf_en_0_pkts)
-                dev->ep_state_tx[ep]--;
-
-            uint8_t offset = qsb_offset_tx;
-            if ((ep_reg & USB_EP_KIND_DBL_BUF) != 0 && (ep_reg & USB_EP_SW_BUF_TX) == 0)
-                offset = qsb_offset_db1;
-            ep_callback(dev, ep, QSB_TRANSACTION_IN, offset);
         }
 
         istr = USB_ISTR;
