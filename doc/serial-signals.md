@@ -26,24 +26,8 @@ RX       | Input     | Data reception from device.
 
 ## Control Signals
 
-All control signals are *active low*, i.e. 0V is asserted, 3.3V is deasserted:
+The Prunt Board 3 only connects TX and RX, so this firmware doesn't implement any control signals:
 
-Control    | Voltage
------------|--------
-Asserted   |   0V
-Deasserted | 3.3V
-
-The control signals adhere to the RS-232 standard, or rather its latest interpretation:
-
-
-Signal | Direction | Purpose | Implementation | Default state
--------|-----------|---------|----------------|--------------
-CTS       | Input   | Hardware handshake: device asserts signal to indicate it is ready to accept data.| Stops transmitting data (on TX signal) if not asserted. Once transmit buffer becomes full, NAK is signalled for OUT packages received from computer. | Asserted (using input with pull-down)
-RTS (RTR) | Output  | Hardware handshake: adapter is ready to accept data (on RX signal). | When the receive buffer's fill level has reach the high-water mark, the signal is deasserted to indicate that the device should pause sending data. | Initially asserted
-DTR       | Output  | *“Computer is ready.”* Usually used for custom purposes. | Output signal is controlled by computer with *SetControlLineState* request (bit D0). | Asserted
-DSR       | Input   | *“Device is ready.”* Usually used for custom purposes. | Changes of the input signal are communicated to the computer using *SerialState* notification (bit *TxCarrier*). | Asserted (using input with pull-down)
-DCD       | Input   | *“Data carrier detected.”* Usually used for custom purposes. | Changes of the input signal are communicated to computer using *SerialState* notification (bit *RxCarrier*). | Asserted (using input with pull-down)
-
-Note that *RTS* has been redefined over time from being used for half-duxplex communication to serving for hardware flow control. The latter one is correctly called *RTR* for *ready to receive*. However, in most software and hardware products, it's still called *RTS*.
-
-The *USB PSTN Devices Specification* specifies bit D1 in the *SetControlLineState* request for controlling *RTS* for half-duplex communication. As this adapter uses *RTS* as *RTR* for hardware flow control, bit D1 is disregarded.
+- *SetControlLineState* requests (DTR and RTS) are accepted and ignored.
+- *SerialState* notifications only report UART errors. The bits for the input signals (DCD and DSR) are never set.
+- There's no hardware flow control on the serial side. See [Firmware Architecture](firmware.md).

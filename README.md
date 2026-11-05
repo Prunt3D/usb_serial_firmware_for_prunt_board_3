@@ -8,7 +8,7 @@ Open-source hardware and firmware for a USB-to-serial adapter.
 - **No driver installation required** on Windows, Linux and macOS as it implements the USB CDC ACM and PSTN protocols. It will automatically appear as a virtual serial port (virtual COM port).
 - **Minimal components needed** as it is built around the STM32F042 MCU that can operate USB without an external crystal.
 - **Robust flow control** allowing to operate it at the limit of the selected bit rate.
-- Supports hardware flow control (RTS/CTS), bit rates from 1200 to 3,000,000 bps, control of DTR signal, notification of DSR and DCD signals.
+- Supports bit rates from 1200 to 6,000,000 bps, on the TX and RX signals only.
 
 
 ## Supported MCUs
@@ -26,7 +26,7 @@ It shouldn't be too difficult to extend the firmware such that is runs on other 
 
 Flow control ensures that data is only sent as fast as the receiver can accept it. For a USB-to-serial adapter, flow control is most important on the link from the computer to the adapter as USB communication is much faster than serial communication. USB flow control is part of the USB standard and this firmware implements it. It prevents the internal buffer from overflowing and losing data.
 
-In addition, the firmware and hardware implement hardware flow control on the serial port using the RTS and CTS signals. Hardware flow control is always enabled no matter how the virtual port is configured on the computer. It isn't part of the USB CDC protocol to enable or disable it. If you don't want to use hardware flow control, don't connect anything to RTS and CTS. 
+The firmware doesn't implement hardware flow control on the serial port, as the Prunt Board 3 only connects TX and RX. If the computer falls behind and the receive buffer overruns, the firmware discards the buffered data and reports an overrun to the computer.
 
 
 ## Hardware

@@ -28,23 +28,31 @@ If data has arrived and if no outgoing USB operation is in progress, the data is
 
 ## Flow control
 
-The software implements flow control to regulate the speed of data transfer in order not to overflow the buffers. The speed and speed regulation for USB-to-serial and the serial-to-USB direction are completely independent.
+The software implements flow control to regulate the speed of data transfer in order not to overflow the buffers. The two directions are independent.
 
-On the UART side, *hardware flow control* using the RTS and CTS signals is implemented. It's always active. If the pins are not connected, transmission works as if there was no flow control.
-
-On the USB side, standard USB flow control is used.
+The UART side has no flow control: the Prunt Board 3 only connects TX and RX, so the firmware doesn't implement RTS and CTS. On the USB side, standard USB flow control is used.
 
 ### USB-to-serial path
 
-When the transmission ring buffer is becoming full, the USB *data out* endpoint (data in from the device's perspective) is paused, i. e. it is set to return NAK when the host polls. This indicates that the device is currently unable to accept more data. The threshold for pausing is the buffer's *high-water mark*. Once the data in the buffer falls below the high-water mark, it is unpaused.
-
-For the flow control on the UART side, the hardware flow control is enabled in the UART peripheral. So it is fully automatic and no further software actions are needed. If the receiver asserts (pulls low) CTS, the UART will start the transmission of a new byte. When CTS is no longer asserted, transmission continues.
+When the transmission ring buffer is becoming full, the USB *data out* endpoint is paused, i.e. it stops accepting packets and the host's polls get NAK. This tells the host that the device is currently unable to accept more data. The endpoint is paused when less than two packets of space remain, as with double buffering one more packet can still arrive. It's unpaused once there's room again.
 
 ### Serial-to-USB path
 
-To prevent the sender from transmitting more data via the serial connection when the receive buffer is becoming full, the RTS signal is asserted in software in `uart_impl::update_rts()`, which is called frequently from the main loop. It checks the receive buffer fill level. If it exceeds the high-water mark, RTS is asserted (pulled low).
+The sender on the UART can't be paused. The host can normally collect data faster than the UART delivers it, but if it falls behind, the receive ring buffer overruns. The firmware then discards the buffered data and reports an overrun to the host. This can happen at 6 Mbaud with heavy traffic in both directions, as they share the USB bus.
 
-No special flow control is needed on the USB side. The host polls and receives data whenever it is ready. If the host is slow at picking up data, the ring buffer fill level will raise and eventually assert the RTS signal.
+When the host first reads from the *data in* endpoint after configuration, or after clearing a halt, it gets two empty packets. This is how the USB peripheral starts double buffering (see `dbl_buf_queued_tx()`).
+
+## Line coding
+
+The line coding returns to the default, 9600 8N1, at every SET_CONFIGURATION.
+
+A change takes effect once the UART has sent everything queued before the request. Data that arrives after the request waits and goes out with the new settings. GET_LINE_CODING reports the new settings straight away.
+
+A baud rate of 75 selects 6 Mbaud, as Linux doesn't easily allow rates above 4 Mbaud.
+
+## UART errors
+
+Framing, parity and overrun errors are reported to the host with a *SerialState* notification. Noise errors are reported as framing errors. Received data keeps flowing to the host while errors are being reported.
 
 ## USB Stack
 

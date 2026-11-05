@@ -59,11 +59,11 @@ If the USB peripheral receives a packet from the host, it will store it into the
 
 The PMA buffers are a special static RAM area that is accessed both by the MCU code and the USB peripheral. The USB peripheral can only transmit from and receive to this memory area. Each endpoint has one or two dedicated areas in the PMA buffers.
 
-For maximum performance, *double buffering* can be used, i.e. two areas in the PMA buffers for the same endpoint. They are then used alternatively so that one area can be used by the USB peripheral while the MCU code fills the other one. This project does not use double buffering, in particular because it is not supported by *libopencm3*.
+For maximum performance, *double buffering* can be used, i.e. two areas in the PMA buffers for the same endpoint. They are then used alternatively so that one area can be used by the USB peripheral while the MCU code fills the other one. This project uses double buffering for its bulk data endpoints, which is why it has its own USB stack: *libopencm3* doesn't support it.
 
 
 ## libopencm3
 
-*libopencm3* implements major parts of the USB device protocol, in particular the communication regarding the USB descriptor, dispatching of messages to separate callbacks for each endpoint as well as the low-level configuration of USB registers.
+This project uses *libopencm3* for the MCU's clock, GPIO, DMA and USART peripherals. Its USB stack, in `firmware/lib/qsb`, is derived from the one in *libopencm3*. See [Firmware Architecture](firmware.md) for why.
 
-With *libopencm3*, the USB descriptor can be provided as a easy to setup data structure; hardly any other code is needed.
+As in *libopencm3*, the USB descriptor can be provided as an easy to set up data structure.

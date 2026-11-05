@@ -60,20 +60,20 @@ public:
     bool set_line_coding(qsb_pstn_line_coding *line_coding);
 
     /**
-     * @brief Sets the control line state of the global UART instance.
+     * @brief Handles the control line state sent by the host.
      * 
      * This member function is called to process a SET_CONTROL_LINE_STATE request.
-     * It sets the DTR output signal.
+     * The board has no control signals, so the state is ignored.
      * 
      * @param state control line state, in format defined by USB CDC PSTN standard
      */
     void set_control_line_state(uint16_t state);
 
     /**
-     * @brief Gets the serial state from global UART instance.
+     * @brief Gets the serial state.
      * 
-     * The serial state consists of the DCD and DSR input signal
-     * as well as error conditions.
+     * The serial state consists of the UART errors that the host
+     * hasn't been told about yet.
      * 
      * @return serial state, in format defined by USB CDC PSTN standard
      */
@@ -89,7 +89,7 @@ public:
     /**
      * @brief Called when data has been received via USB.
      * 
-     * Transmits the received data via the UART.
+     * Queues the received data for transmission via the UART.
      * 
      * @param dev USB device
      */
@@ -98,16 +98,15 @@ public:
     /**
      * @brief Called when data has been transmitted via USB.
      * 
-     * Checks if more data has been received via UART and
-     * is ready to be transmitted.
+     * This does nothing at the moment, as poll() sends more data
+     * whenever the endpoint has room.
      */
     void on_usb_data_transmitted();
 
     /**
      * @brief Polls for new data received via UART.
      * 
-     * Additionally checks for a changed serial state that
-     * need to be sent to the host and updates LEDs and RTS output signal.
+     * Additionally sends any pending UART errors to the host.
      */
     void poll();
 
