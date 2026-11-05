@@ -407,9 +407,9 @@ void qsb_dev_poll(qsb_device* dev)
 void qsb_dev_disconnect(__attribute__((unused)) qsb_device* dev, bool disconnected)
 {
     if (disconnected) {
-        USB_BCDR |= USB_BCDR_DPPU;
-    } else {
         USB_BCDR &= ~USB_BCDR_DPPU;
+    } else {
+        USB_BCDR |= USB_BCDR_DPPU;
     }
 }
 #endif

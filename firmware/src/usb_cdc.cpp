@@ -18,7 +18,6 @@
 #include <libopencm3/stm32/syscfg.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/st_usbfs.h>
 #include "qsb_device.h"
 #include <string.h>
 
@@ -35,12 +34,11 @@ static void usb_reset()
 	configured = 0;
 }
 
-static void bootloader_reset_control_completed(
+static void bootloader_entry_control_completed(
 	qsb_device *dev,
 	__attribute__((unused)) qsb_setup_data *req)
 {
-	qsb_dev_disconnect(dev, false);
-	*USB_BCDR_REG &= ~USB_BCDR_DPPU;
+	qsb_dev_disconnect(dev, true);
 	rcc_periph_reset_pulse(RST_USB);
 	gpio_mode_setup(USB_DP_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, USB_DP_PIN);
 	gpio_clear(USB_DP_PORT, USB_DP_PIN);
@@ -67,7 +65,7 @@ static enum qsb_request_return_code vendor_control_request(
 		*len != 0)
 		return QSB_REQ_NOTSUPP;
 
-	*complete = bootloader_reset_control_completed;
+	*complete = bootloader_entry_control_completed;
 	return QSB_REQ_HANDLED;
 }
 

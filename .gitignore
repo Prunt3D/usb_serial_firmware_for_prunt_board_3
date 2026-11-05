@@ -1,2 +1,4 @@
 .DS_Store
+.ccls-cache/
+tools/enter-system-bootloader
 

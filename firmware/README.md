@@ -39,9 +39,11 @@ An ST-Link adapter (except the lastet V3 series) can provide sufficient power to
 
 ## Entering the system bootloader
 
-On STM32F0 builds, the firmware exposes a vendor-specific control request that erases the first user-flash page and resets the MCU. This leaves the first word at `0x08000000` erased, which selects the STM32 system memory bootloader on parts with the empty-check boot path.
+On the STM32F042, the firmware exposes a vendor-specific control request that disconnects from USB, erases the first user-flash page, and reloads the option bytes. The reload resets the MCU and updates its flash-empty flag, which a normal system reset does not do. Because the first word at `0x08000000` is now erased, the MCU starts the STM32 system memory bootloader.
 
-Send a control transfer to endpoint 0 with:
+The application cannot run again until the firmware is reflashed. Erasing the page removes the vector table, so the MCU keeps starting the system bootloader, including after a power cycle. To recover, flash the firmware through the system bootloader or the debug port.
+
+Use [`tools/enter-system-bootloader.c`](../tools/enter-system-bootloader.c) to send the request, passing the board's USB serial number if more than one board is connected. To send it another way, make a control transfer to endpoint 0 with:
 
 - `bmRequestType = 0x40` (vendor, device, host-to-device)
 - `bRequest = 0x51`
