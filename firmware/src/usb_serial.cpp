@@ -95,12 +95,7 @@ void usb_serial_impl::poll()
     update_nak();
 
     // Check for UART receive errors.
-    uint16_t uart_errors = uart.take_errors();
-    if (uart_errors != 0) {
-        pending_interrupt |= uart_errors;
-        send_serial_state();
-        return;
-    }
+    pending_interrupt |= uart.take_errors();
 
     uint16_t state = serial_state();
     if (state != last_serial_state)
