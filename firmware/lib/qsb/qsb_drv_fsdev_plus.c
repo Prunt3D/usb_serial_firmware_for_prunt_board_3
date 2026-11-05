@@ -307,18 +307,21 @@ void qsb_dev_ep_stall_set(qsb_device* dev, uint8_t addr, uint8_t stall)
         return;
     }
 
+    // On EP0, the peripheral sets the data toggles for each SETUP, and clearing them here would
+    // give the status stage of this same request the wrong one.
     if (is_tx) {
         qsb_ep_stat_tx_set(ep, stall ? USB_EP_STAT_TX_STALL : USB_EP_STAT_TX_NAK);
 
         // Reset to DATA0 if clearing stall condition, and forget any packet that was queued
         if (!stall) {
-            qsb_ep_dtog_tx_clear(ep);
+            if (ep != 0)
+                qsb_ep_dtog_tx_clear(ep);
             dev->ep_state_tx[ep] = sgl_buf_0_pkts;
         }
 
     } else {
         // Reset to DATA0 if clearing stall condition
-        if (!stall)
+        if (!stall && ep != 0)
             qsb_ep_dtog_rx_clear(ep);
 
         qsb_ep_stat_rx_set(ep, stall ? USB_EP_STAT_RX_STALL : USB_EP_STAT_RX_VALID);
