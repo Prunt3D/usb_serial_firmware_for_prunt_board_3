@@ -73,7 +73,7 @@ public:
      * @brief Gets the serial state.
      * 
      * The serial state consists of the UART errors that the host
-     * hasn't been told about yet.
+     * hasn't been told about yet, with DCD and DSR always active.
      * 
      * @return serial state, in format defined by USB CDC PSTN standard
      */

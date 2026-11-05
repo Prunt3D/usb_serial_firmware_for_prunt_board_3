@@ -205,8 +205,9 @@ void usb_serial_impl::set_control_line_state(uint16_t state)
 
 uint16_t usb_serial_impl::serial_state()
 {
-    uint16_t status = (uint16_t)pending_interrupt;
-    return status;
+    // The board has no DCD or DSR signals, so report them as active rather than leave a host waiting
+    // for them. macOS and BSD wait for DCD when opening /dev/tty* devices.
+    return pending_interrupt | QSB_PSTN_UART_STATE_RX_CARRIER | QSB_PSTN_UART_STATE_TX_CARRIER;
 }
 
 void usb_serial_impl::send_serial_state()

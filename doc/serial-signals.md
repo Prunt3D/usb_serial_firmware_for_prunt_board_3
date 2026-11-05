@@ -29,5 +29,5 @@ RX       | Input     | Data reception from device.
 The Prunt Board 3 only connects TX and RX, so this firmware doesn't implement any control signals:
 
 - *SetControlLineState* requests (DTR and RTS) are accepted and ignored.
-- *SerialState* notifications only report UART errors. The bits for the input signals (DCD and DSR) are never set.
+- *SerialState* notifications report UART errors. The bits for the input signals (DCD and DSR) are always set, as some systems wait for DCD when opening a port.
 - There's no hardware flow control on the serial side. See [Firmware Architecture](firmware.md).
