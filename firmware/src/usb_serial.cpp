@@ -109,7 +109,7 @@ void usb_serial_impl::poll()
     size_t len = uart.rx_data_len();
     if (!needs_zlp && len == 0)
             return; // no data, no ZLP
-    if (!needs_zlp && len < TX_HOLDBACK_MAX_LEN && !has_expired(tx_timestamp + TX_HOLDBACK_MAX_TIME))
+    if (!needs_zlp && len < TX_HOLDBACK_MAX_LEN && millis() - tx_timestamp < TX_HOLDBACK_MAX_TIME)
         return; // wait for more data to arrive
 
     uint16_t write_avail = qsb_dev_ep_transmit_avail(usb_device, DATA_IN_1);

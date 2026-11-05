@@ -26,11 +26,6 @@ void delay(uint32_t ms)
 		;
 }
 
-bool has_expired(uint32_t timeout)
-{
-    return (int32_t)timeout - (int32_t)millis_count <= 0;
-}
-
 void common_init()
 {
 	// Initialize SysTick

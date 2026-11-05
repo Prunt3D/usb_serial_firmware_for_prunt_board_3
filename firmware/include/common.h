@@ -30,11 +30,3 @@ uint32_t millis();
  * @param ms delay length, in milliseconds
  */
 void delay(uint32_t ms);
-
-/**
- * @brief Checks if the specified timeout has expired.
- * 
- * @param timeout timeout time, derived from a call to millis()
- * @return `true` if timeout time has been reached or passed, `false` otherwise
- */
-bool has_expired(uint32_t timeout);
