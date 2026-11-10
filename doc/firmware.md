@@ -52,7 +52,7 @@ A baud rate of 75 selects 6 Mbaud, as Linux doesn't easily allow rates above 4 M
 
 ## UART errors
 
-Framing, parity and overrun errors are reported to the host with a *SerialState* notification. Noise errors are reported as framing errors. Received data keeps flowing to the host while errors are being reported.
+Framing, parity and overrun errors are reported to the host with a *SerialState* notification. Noise errors are reported as framing errors. Received data keeps flowing to the host while errors are being reported, but not the bytes with a parity, framing or noise error: the USART doesn't pass those to the DMA, as `DDRE` in `USART_CR3` is clear.
 
 ## USB Stack
 

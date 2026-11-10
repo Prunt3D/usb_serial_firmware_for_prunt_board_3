@@ -29,8 +29,9 @@ The host will initially read the USB descriptor and then activate the device whe
 
 ## USB serial device
 
-USB serial devices implement a USB CDC device with the subclass PSTN and are defined in [Class definition for Communication Devices 1.2](https://www.usb.org/document-library/class-definitions-communication-devices-12). They basically consist of a CDC configuration with three endpoints:
-- Control endpoint for configuration requests (baud rate, DTR state etc.) and notifications (DCD state, errors)
+USB serial devices implement a USB CDC device with the subclass PSTN and are defined in [Class definition for Communication Devices 1.2](https://www.usb.org/document-library/class-definitions-communication-devices-12). They basically consist of a CDC configuration with these endpoints:
+- Control endpoint for configuration requests (baud rate, DTR state etc.)
+- Interrupt endpoint for notifications (DCD state, errors)
 - Data endpoint for USB to serial transmission
 - Data endpoint for serial to USB transmission
 
