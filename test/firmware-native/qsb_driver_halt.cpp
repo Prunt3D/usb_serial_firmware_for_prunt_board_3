@@ -196,6 +196,33 @@ int main()
     dbl_buf_read_rx(dev, 1);
     check("EP1 halted: handling CTR_RX leaves double buffering off", (endpoint_registers[1].value & USB_EP_KIND) == 0);
 
+    // If STAT ever stops showing a halt on a double-buffered endpoint, the halt still counts, as
+    // double buffering is off
+    out_packets = 0;
+    endpoint_registers[1].value ^= USB_EP_DTOG_RX; // a packet waiting
+    endpoint_registers[1].value ^= USB_EP_STAT_RX_STALL ^ USB_EP_STAT_RX_NAK;
+    dbl_buf_read_rx(dev, 1);
+    check("EP1 halted, STAT_RX showing NAK: a waiting packet isn't read", out_packets == 0);
+    check("  and GET_STATUS still reports the halt", qsb_dev_ep_stall_get(dev, 0x01) == 1);
+    qsb_dev_ep_stall_set(dev, 0x01, 1);
+    check("  and halting it again stalls it", stat_rx(1) == USB_EP_STAT_RX_STALL);
+    endpoint_registers[1].value ^= USB_EP_STAT_RX_STALL ^ USB_EP_STAT_RX_NAK;
+    qsb_dev_ep_stall_set(dev, 0x01, 0);
+    check("  until the host clears it", qsb_dev_ep_stall_get(dev, 0x01) == 0 && stat_rx(1) == USB_EP_STAT_RX_VALID);
+
+    qsb_dev_ep_stall_set(dev, 0x82, 1);
+    endpoint_registers[2].value ^= USB_EP_STAT_TX_STALL ^ USB_EP_STAT_TX_NAK;
+    endpoint_registers[2].value ^= USB_EP_DTOG_TX; // DTOG_TX and SW_BUF_TX differ, which looks like room
+    check("EP2 halted, STAT_TX showing NAK: no room is reported", qsb_dev_ep_transmit_avail(dev, 0x82) == 0);
+    check("  and a packet is refused", qsb_dev_ep_transmit_packet(dev, 0x82, packet, sizeof(packet)) == -1);
+    check("  and double buffering stays off", (endpoint_registers[2].value & USB_EP_KIND) == 0);
+    check("  and GET_STATUS still reports the halt", qsb_dev_ep_stall_get(dev, 0x82) == 1);
+    qsb_dev_ep_stall_set(dev, 0x82, 1);
+    check("  and halting it again stalls it", stat_tx(2) == USB_EP_STAT_TX_STALL);
+    endpoint_registers[2].value ^= USB_EP_STAT_TX_STALL ^ USB_EP_STAT_TX_NAK;
+    qsb_dev_ep_stall_set(dev, 0x82, 0);
+    check("  until the host clears it", qsb_dev_ep_stall_get(dev, 0x82) == 0);
+
     // SET_CONFIGURATION(0) disables the endpoints, whether they're halted or not
     static qsb_device_desc device_desc = {};
     device_desc.bMaxPacketSize0 = 16;

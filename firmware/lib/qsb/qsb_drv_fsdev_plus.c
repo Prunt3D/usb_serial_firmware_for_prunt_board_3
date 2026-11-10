@@ -134,6 +134,25 @@ static bool dbl_buf_has_packet_rx(qsb_device* dev, uint8_t ep)
 
 static inline void ep_callback(qsb_device* dev, uint8_t ep, uint8_t type, uint8_t offset);
 
+// Tells if an endpoint is halted. Halting a double-buffered endpoint turns double buffering off,
+// which is what qsb_dev_ep_read_packet() and the TX queue go by, so that counts as halted too, in case
+// STAT ever stops showing the halt, such as for a transaction already under way when it was set.
+// These are on the data path, which has little time to spare at 6 Mbaud, so they're inlined and take
+// the register value the caller has already read.
+static inline __attribute__((always_inline)) bool is_halted_tx(qsb_device* dev, uint8_t ep, uint32_t ep_reg)
+{
+    if ((ep_reg & USB_EP_STAT_TX) == USB_EP_STAT_TX_STALL)
+        return true;
+    return dev->ep_state_tx[ep] == dbl_buf_en && (ep_reg & USB_EP_KIND_DBL_BUF) == 0;
+}
+
+static inline __attribute__((always_inline)) bool is_halted_rx(qsb_device* dev, uint8_t ep, uint32_t ep_reg)
+{
+    if ((ep_reg & USB_EP_STAT_RX) == USB_EP_STAT_RX_STALL)
+        return true;
+    return dev->ep_state_rx[ep] >= dbl_buf_ready_0 && (ep_reg & USB_EP_KIND_DBL_BUF) == 0;
+}
+
 // Reads the waiting packets of a double-buffered RX endpoint, unless it's paused or halted. Packets
 // that aren't read stay in their buffers. During a pause, the host gets NAK once both are full.
 // Clearing a halt drops them.
@@ -143,7 +162,7 @@ static void dbl_buf_read_rx(qsb_device* dev, uint8_t ep)
         return;
 
     // A halt turns off DBL_BUF, which qsb_dev_ep_read_packet() goes by to find the packet.
-    if ((USB_EP(ep) & USB_EP_STAT_RX) == USB_EP_STAT_RX_STALL)
+    if (is_halted_rx(dev, ep, USB_EP(ep)))
         return;
 
     // Two zero-length packets look like nothing at all. This frees them, and otherwise does nothing.
@@ -215,20 +234,28 @@ void qsb_dev_ep_setup(qsb_device* dev, uint8_t addr, uint32_t type, int buffer_s
     }
 }
 
-// The actual TX status of a double-buffered endpoint. VALID reads as NAK during a buffer conflict,
-// and it's never really NAK.
+// The actual TX status of a double-buffered endpoint. While double buffering is on, VALID reads as
+// NAK during a buffer conflict, and it's never really NAK. A halt turns double buffering off, and the
+// status can then be NAK, such as when the hardware finishes a transaction already under way.
 static uint32_t dbl_buf_stat_tx(uint8_t ep)
 {
-    uint32_t stat = USB_EP(ep) & USB_EP_STAT_TX;
-    return stat == USB_EP_STAT_TX_NAK ? USB_EP_STAT_TX_VALID : stat;
+    uint32_t ep_reg = USB_EP(ep);
+    uint32_t stat = ep_reg & USB_EP_STAT_TX;
+    if (stat == USB_EP_STAT_TX_NAK && (ep_reg & USB_EP_KIND_DBL_BUF) != 0)
+        return USB_EP_STAT_TX_VALID;
+    return stat;
 }
 
-// The actual RX status of a double-buffered endpoint. VALID reads as NAK during a buffer conflict,
-// and it's never really NAK, as pausing works by not releasing the buffer.
+// The actual RX status of a double-buffered endpoint. While double buffering is on, VALID reads as
+// NAK during a buffer conflict, and it's never really NAK, as pausing works by not releasing the
+// buffer. A halt turns double buffering off, and the status can then be NAK, as for TX.
 static uint32_t dbl_buf_stat_rx(uint8_t ep)
 {
-    uint32_t stat = USB_EP(ep) & USB_EP_STAT_RX;
-    return stat == USB_EP_STAT_RX_NAK ? USB_EP_STAT_RX_VALID : stat;
+    uint32_t ep_reg = USB_EP(ep);
+    uint32_t stat = ep_reg & USB_EP_STAT_RX;
+    if (stat == USB_EP_STAT_RX_NAK && (ep_reg & USB_EP_KIND_DBL_BUF) != 0)
+        return USB_EP_STAT_RX_VALID;
+    return stat;
 }
 
 void qsb_internal_ep_reset(qsb_device* dev)
@@ -341,19 +368,12 @@ void qsb_dev_ep_stall_set(qsb_device* dev, uint8_t addr, uint8_t stall)
     }
 }
 
-uint8_t qsb_dev_ep_stall_get(__attribute__((unused)) qsb_device* dev, uint8_t addr)
+uint8_t qsb_dev_ep_stall_get(qsb_device* dev, uint8_t addr)
 {
-    bool is_tx = qsb_endpoint_is_tx(addr);
     uint8_t ep = qsb_endpoint_num(addr);
-    if (is_tx) {
-        if ((USB_EP(ep) & USB_EP_STAT_TX) == USB_EP_STAT_TX_STALL)
-            return 1;
-
-    } else {
-        if ((USB_EP(ep) & USB_EP_STAT_RX) == USB_EP_STAT_RX_STALL)
-            return 1;
-    }
-    return 0;
+    if (qsb_endpoint_is_tx(addr))
+        return is_halted_tx(dev, ep, USB_EP(ep)) ? 1 : 0;
+    return is_halted_rx(dev, ep, USB_EP(ep)) ? 1 : 0;
 }
 
 void qsb_dev_ep_pause(qsb_device* dev, uint8_t addr)
@@ -414,7 +434,7 @@ uint16_t qsb_dev_ep_transmit_avail(qsb_device* dev, uint8_t addr)
     uint32_t ep_reg = USB_EP(ep);
 
     // During a halt, the caller should keep its data, as clearing the halt drops queued packets.
-    if ((ep_reg & USB_EP_STAT_TX) == USB_EP_STAT_TX_STALL)
+    if (is_halted_tx(dev, ep, ep_reg))
         return 0;
 
     switch (dev->ep_state_tx[ep]) {
@@ -434,7 +454,7 @@ int qsb_dev_ep_transmit_packet(qsb_device* dev, uint8_t addr, const uint8_t* buf
 
     // Submitting a packet would end a halt, and only the host should do that. EP0 is the exception,
     // as it still has to send the status of the request that set the halt.
-    if (ep != 0 && (USB_EP(ep) & USB_EP_STAT_TX) == USB_EP_STAT_TX_STALL)
+    if (ep != 0 && is_halted_tx(dev, ep, USB_EP(ep)))
         return -1;
 
     if (state == sgl_buf_0_pkts) {
