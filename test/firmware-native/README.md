@@ -15,7 +15,7 @@ If libopencm3 isn't in PlatformIO's usual place, pass `-DLIBOPENCM3_INCLUDE=<pat
 
 | Test | Runs | Checks |
 |---|---|---|
-| `uart_rx_overrun` | `uart.cpp` | Over 4 million steps with a model of the circular DMA, no data is lost without an overrun being reported, and no overrun is reported without data being lost. |
+| `uart_rx_overrun` | `uart.cpp` | Over 4 million steps with a model of the circular DMA, no data is lost without an overrun being reported, and no overrun is reported without data being lost. Also that bytes arriving while a copy runs are reported as an overrun only if they overwrite the first byte before the copy has read it. |
 | `uart_line_coding` | `uart.cpp` | When a line coding change takes effect, that received data is masked by the data bits it arrived with, and that a request changing nothing leaves the USART alone. |
 | `usb_serial_state` | `usb_serial.cpp`, `uart.cpp` | What *SerialState* notifications contain, that one refused by the USB stack stays pending, and that one dropped before the host collects it is sent again. |
 | `usb_cdc_requests` | `usb_cdc.cpp` | That CDC class requests are only accepted while the device is configured. |
@@ -24,6 +24,6 @@ If libopencm3 isn't in PlatformIO's usual place, pass `-DLIBOPENCM3_INCLUDE=<pat
 
 ## What they don't cover
 
-They don't replace testing on a board. Nothing here checks timing, the electrical side, or how a real host behaves.
+They don't replace testing on a board. Nothing here checks timing, the electrical side, or how a real host behaves. That includes what the receive buffer copy relies on: once it has read the first byte, `memcpy()` stays ahead of the DMA.
 
 `qsb_driver_halt` has a small model of the USB endpoint registers, but it only covers what a write does to each bit. It doesn't model USB transactions or the double buffering conflicts in `dbl_buf_queued_tx()`, so most of the data path isn't tested. Earlier attempts to simulate that got it wrong in ways only register dumps from a real F042 showed, so any addition to the model that goes beyond how writes behave should be checked against one.

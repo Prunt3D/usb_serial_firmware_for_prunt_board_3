@@ -13,6 +13,9 @@
 
 // CNDTR of the receive channel
 extern int stub_rx_cndtr;
+// If set, called each time CNDTR of the receive channel has been read, so that a test can have bytes
+// arrive straight after
+extern void (*stub_rx_cndtr_read_hook)();
 // Set if the transmit channel has finished
 extern int stub_tx_dma_done;
 
@@ -30,6 +33,12 @@ static inline void dma_set_memory_address(int, int, uint32_t) {}
 static inline void dma_set_number_of_data(int, int, int) {}
 static inline void dma_enable_channel(int, int) {}
 static inline void dma_disable_channel(int, int) {}
-static inline int dma_get_number_of_data(int, int) { return stub_rx_cndtr; }
+static inline int dma_get_number_of_data(int, int)
+{
+    int cndtr = stub_rx_cndtr;
+    if (stub_rx_cndtr_read_hook)
+        stub_rx_cndtr_read_hook();
+    return cndtr;
+}
 static inline bool dma_get_interrupt_flag(int, int, int) { return stub_tx_dma_done != 0; }
 static inline void dma_clear_interrupt_flags(int, int, int) { stub_tx_dma_done = 0; }

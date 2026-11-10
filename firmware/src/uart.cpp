@@ -11,6 +11,7 @@
 #include "common.h"
 #include "hardware.h"
 #include "uart.h"
+#include <libopencm3/cm3/cortex.h>
 #include <libopencm3/stm32/dma.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
@@ -180,13 +181,22 @@ void uart_impl::poll_tx_complete()
 size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
 {
     // Copying replaces last_rx_size, which is the only evidence of an overrun since the last check.
-    check_rx_overrun();
+    // The check and the copy use the same position, so that the DMA can't pass the tail in between.
+    int buf_head = rx_buf_head();
+    check_rx_overrun(buf_head);
+    if (buf_head == rx_buf_tail || len == 0)
+        return 0; // nothing to copy
 
-    int buf_head = UART_RX_BUF_LEN - dma_get_number_of_data(USART_DMA, USART_DMA_RX_CHAN);
-    if (buf_head == UART_RX_BUF_LEN)
-        buf_head = 0;
-    if (buf_head == rx_buf_tail)
-        return 0; // no new data
+    // The DMA overwrites the oldest bytes first, so the copy only loses data if the DMA gets to the
+    // first byte before it's read. That byte is read before looking where the DMA is, and kept. The
+    // rest can't be overtaken if nothing holds the copy up: memcpy() takes about 14 cycles a byte,
+    // and at 6 Mbaud the USART delivers one every 72 cycles at the most. SysTick, the only
+    // interrupt, takes about 45, so interrupts are masked until the copy is done.
+    int free_len = UART_RX_BUF_LEN - rx_data_len(buf_head);
+    uint32_t irq_mask = cm_mask_interrupts(1);
+    uint8_t first = *(volatile uint8_t *)(rx_buf + rx_buf_tail);
+    int advanced = rx_buf_head() - buf_head;
+    uint8_t *start = data;
 
     int n1 = 0;
     int n2 = 0;
@@ -197,7 +207,6 @@ size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
         // chunk between tail and end of buffer
         n1 = std::min((int)len, UART_RX_BUF_LEN - rx_buf_tail);
         memcpy(data, rx_buf + rx_buf_tail, n1);
-        mask_rx_data(data, n1);
         rx_buf_tail += n1;
         if (rx_buf_tail >= UART_RX_BUF_LEN)
             rx_buf_tail = 0;
@@ -206,21 +215,35 @@ size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
         last_rx_size -= n1;
     }
 
-    if (len == 0)
-        return n1;
-
-    if (rx_buf_tail < buf_head)
+    if (len > 0 && rx_buf_tail < buf_head)
     {
         last_rx_size = buf_head - rx_buf_tail;
         // chunk between tail and head (no wrap around)
         n2 = std::min((int)len, buf_head - rx_buf_tail);
         memcpy(data, rx_buf + rx_buf_tail, n2);
-        mask_rx_data(data, n2);
         rx_buf_tail += n2;
         last_rx_size -= n2;
     }
 
+    cm_mask_interrupts(irq_mask);
+
+    // memcpy() read the first byte again, after the DMA may have overwritten it.
+    start[0] = first;
+    mask_rx_data(start, n1 + n2);
+
+    if (advanced < 0)
+        advanced += UART_RX_BUF_LEN;
+    if (advanced > free_len)
+        pending_errors |= (uint16_t)uart_error::overrun;
+
     return n1 + n2;
+}
+
+// The helpers below are on the data path, which has little time to spare at 6 Mbaud, so they're inlined.
+inline __attribute__((always_inline)) int uart_impl::rx_buf_head()
+{
+    int buf_head = UART_RX_BUF_LEN - dma_get_number_of_data(USART_DMA, USART_DMA_RX_CHAN);
+    return buf_head == UART_RX_BUF_LEN ? 0 : buf_head;
 }
 
 void uart_impl::mask_rx_data(uint8_t *data, int len)
@@ -235,9 +258,11 @@ void uart_impl::mask_rx_data(uint8_t *data, int len)
 
 size_t uart_impl::rx_data_len()
 {
-    int buf_head = UART_RX_BUF_LEN - dma_get_number_of_data(USART_DMA, USART_DMA_RX_CHAN);
-    if (buf_head == UART_RX_BUF_LEN)
-        buf_head = 0;
+    return rx_data_len(rx_buf_head());
+}
+
+inline __attribute__((always_inline)) size_t uart_impl::rx_data_len(int buf_head)
+{
     if (buf_head >= rx_buf_tail)
         return buf_head - rx_buf_tail;
 
@@ -246,13 +271,16 @@ size_t uart_impl::rx_data_len()
 
 void uart_impl::check_rx_overrun()
 {
-    size_t len = rx_data_len();
+    check_rx_overrun(rx_buf_head());
+}
+
+inline __attribute__((always_inline)) void uart_impl::check_rx_overrun(int buf_head)
+{
+    size_t len = rx_data_len(buf_head);
     if (len < last_rx_size) {
         // overrun detected
         // clear error condition by discarding data
-        rx_buf_tail = UART_RX_BUF_LEN - dma_get_number_of_data(USART_DMA, USART_DMA_RX_CHAN);
-        if (rx_buf_tail == UART_RX_BUF_LEN)
-            rx_buf_tail = 0;
+        rx_buf_tail = buf_head;
         last_rx_size = 0;
         rx_len_before_coding = 0;
         pending_errors |= (uint16_t)uart_error::overrun;

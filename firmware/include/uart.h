@@ -174,6 +174,15 @@ private:
      */
     void check_rx_overrun();
 
+    /// Checks if RX buffer has been overrun, with the DMA at the given position.
+    void check_rx_overrun(int buf_head);
+
+    /// The position in the RX buffer that the DMA writes next
+    int rx_buf_head();
+
+    /// The amount of data in the RX buffer, with the DMA at the given position
+    size_t rx_data_len(int buf_head);
+
     /// Checks for USART hardware receive errors and clears the peripheral flags.
     void check_usart_errors();
 
