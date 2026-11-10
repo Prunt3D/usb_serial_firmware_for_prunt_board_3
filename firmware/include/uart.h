@@ -14,7 +14,7 @@
 #include <stdlib.h>
 
 #define UART_TX_BUF_LEN 2048
-#define UART_RX_BUF_LEN 1024
+#define UART_RX_BUF_LEN 2048
 
 enum class uart_stopbits
 {
