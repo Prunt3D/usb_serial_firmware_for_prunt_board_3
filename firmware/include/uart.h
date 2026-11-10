@@ -200,6 +200,13 @@ private:
      */
     static void clear_high_bits(uint8_t* buf, int buf_len);
 
+    /// Deletes the high bit of each byte in the receive buffer from `start` up to `end`. `start` can
+    /// be negative, to count back from the end of the buffer.
+    void clear_high_bits_rx(int start, int end);
+
+    /// Masks received data to the data bits that each byte was received with.
+    void mask_rx_data(uint8_t* data, int len);
+
     // Buffer for data to be transmitted via UART
     //  *  0 <= head < buf_len
     //  *  0 <= tail < buf_len
@@ -248,6 +255,10 @@ private:
     int usart_databits;
     uart_stopbits usart_stopbits;
     uart_parity usart_parity;
+
+    // How many bytes at the start of the receive buffer were received before the last line coding
+    // change. They have already been masked to the data bits they were received with.
+    int rx_len_before_coding;
 
     int rx_high_water_mark;
     int tx_max_chunk_size;

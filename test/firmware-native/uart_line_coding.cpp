@@ -44,6 +44,72 @@ int main()
     uart.copy_rx_data(received, 1);
     check("a received byte is masked after the change is applied", received[0] == 0x43);
 
+    // A byte received before a change keeps its data bits, even if it's only copied after the change
+    restart();
+    uart.transmit(tx_data, sizeof(tx_data));
+    uart.set_coding(9600, 7, uart_stopbits::_1_0, uart_parity::even);
+    receive_byte(0xC3);
+    stub_tx_dma_done = 1;
+    uart.poll();
+    receive_byte(0xC3);
+    uint8_t two[2] = {};
+    size_t copied = uart.copy_rx_data(two, 2);
+    check("a byte received at 8N1 stays whole if it's copied after a change to 7E1", copied == 2 && two[0] == 0xC3);
+    check("  while one received after the change is masked", two[1] == 0x43);
+
+    uart.set_coding(9600, 8, uart_stopbits::_1_0, uart_parity::none);
+    receive_byte(0xC3);
+    uart.poll();
+    receive_byte(0xC3);
+    copied = uart.copy_rx_data(two, 2);
+    check("a byte received at 7E1 loses its parity bit if it's copied after a change to 8N1",
+        copied == 2 && two[0] == 0x43);
+    check("  while one received after the change stays whole", two[1] == 0xC3);
+
+    // Bytes keep their own data bits through several changes before they're copied
+    restart();
+    uint8_t three[3] = {};
+    receive_byte(0xC3);
+    uart.set_coding(9600, 7, uart_stopbits::_1_0, uart_parity::even);
+    uart.poll();
+    receive_byte(0xC3);
+    uart.set_coding(19200, 7, uart_stopbits::_1_0, uart_parity::even);
+    uart.poll();
+    receive_byte(0xC3);
+    copied = uart.copy_rx_data(three, 3);
+    check("a byte received at 8N1 stays whole after two changes to 7E1",
+        copied == 3 && three[0] == 0xC3 && three[1] == 0x43 && three[2] == 0x43);
+
+    uart.set_coding(9600, 7, uart_stopbits::_1_0, uart_parity::even);
+    uart.poll();
+    receive_byte(0xC3);
+    uart.set_coding(9600, 8, uart_stopbits::_1_0, uart_parity::none);
+    uart.poll();
+    receive_byte(0xC3);
+    uart.set_coding(9600, 7, uart_stopbits::_1_0, uart_parity::even);
+    uart.poll();
+    receive_byte(0xC3);
+    copied = uart.copy_rx_data(three, 3);
+    check("a byte received at 7E1 loses its parity bit after changes to 8N1 and back",
+        copied == 3 && three[0] == 0x43 && three[1] == 0xC3 && three[2] == 0x43);
+
+    // Masking in place reaches bytes on both sides of the end of the ring
+    restart();
+    uart.rx_buf_tail = dma_pos = UART_RX_BUF_LEN - 1;
+    uart.last_rx_size = 0;
+    stub_rx_cndtr = UART_RX_BUF_LEN - dma_pos;
+    uart.set_coding(9600, 7, uart_stopbits::_1_0, uart_parity::even);
+    uart.poll();
+    receive_byte(0xC3);
+    receive_byte(0xC3);
+    uart.set_coding(9600, 8, uart_stopbits::_1_0, uart_parity::none);
+    uart.poll();
+    receive_byte(0xC3);
+    copied = uart.copy_rx_data(three, 3);
+    copied += uart.copy_rx_data(three + copied, 3 - copied);
+    check("bytes received at 7E1 across the end of the ring lose their parity bits after a change to 8N1",
+        copied == 3 && three[0] == 0x43 && three[1] == 0x43 && three[2] == 0xC3);
+
     // A request that changes nothing leaves the USART alone
     restart();
     enables = stub_usart_enable_count;

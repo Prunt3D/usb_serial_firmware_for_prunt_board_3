@@ -197,8 +197,7 @@ size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
         // chunk between tail and end of buffer
         n1 = std::min((int)len, UART_RX_BUF_LEN - rx_buf_tail);
         memcpy(data, rx_buf + rx_buf_tail, n1);
-        if (usart_databits == 7)
-            clear_high_bits(data, n1);
+        mask_rx_data(data, n1);
         rx_buf_tail += n1;
         if (rx_buf_tail >= UART_RX_BUF_LEN)
             rx_buf_tail = 0;
@@ -216,13 +215,22 @@ size_t uart_impl::copy_rx_data(uint8_t *data, size_t len)
         // chunk between tail and head (no wrap around)
         n2 = std::min((int)len, buf_head - rx_buf_tail);
         memcpy(data, rx_buf + rx_buf_tail, n2);
-        if (usart_databits == 7)
-            clear_high_bits(data, n2);
+        mask_rx_data(data, n2);
         rx_buf_tail += n2;
         last_rx_size -= n2;
     }
 
     return n1 + n2;
+}
+
+void uart_impl::mask_rx_data(uint8_t *data, int len)
+{
+    // The bytes received before the last line coding change were masked when it was applied.
+    int old_len = std::min(len, rx_len_before_coding);
+    rx_len_before_coding -= old_len;
+
+    if (usart_databits == 7)
+        clear_high_bits(data + old_len, len - old_len);
 }
 
 size_t uart_impl::rx_data_len()
@@ -246,6 +254,7 @@ void uart_impl::check_rx_overrun()
         if (rx_buf_tail == UART_RX_BUF_LEN)
             rx_buf_tail = 0;
         last_rx_size = 0;
+        rx_len_before_coding = 0;
         pending_errors |= (uint16_t)uart_error::overrun;
         return;
     }
@@ -362,11 +371,18 @@ void uart_impl::apply_pending_coding()
 void uart_impl::apply_coding()
 {
     is_coding_change_pending = false;
-    usart_databits = _databits;
 
     int p = _parity == uart_parity::none ? 0 : 1;
 
     usart_disable(USART);
+
+    // Everything in the receive buffer now was received with the old data bits. The bytes from
+    // before the previous change have already been masked, so only the ones since then may need it.
+    int rx_len = (int)rx_data_len();
+    int unmasked_len = rx_len - rx_len_before_coding;
+    int old_databits = usart_databits;
+    rx_len_before_coding = rx_len;
+    usart_databits = _databits;
 
     set_baudrate(_baudrate);
 
@@ -374,6 +390,13 @@ void uart_impl::apply_coding()
     usart_set_stopbits(USART, stopbits_enum_to_uint32[(int)_stopbits]);
     usart_set_parity(USART, parity_enum_to_uint32[(int)_parity]);
     usart_enable(USART);
+
+    // This is done with the USART running again, so as not to keep it off for longer. The DMA only
+    // writes after these bytes, and only reaches them in an overrun, which discards them.
+    if (old_databits == 7 && unmasked_len > 0) {
+        int end = (rx_buf_tail + rx_len) % UART_RX_BUF_LEN;
+        clear_high_bits_rx(end - unmasked_len, end);
+    }
 
     usart_baudrate = _baudrate;
     usart_stopbits = _stopbits;
@@ -429,4 +452,13 @@ void uart_impl::clear_high_bits(uint8_t* buf, int buf_len)
 {
     for (int i = 0; i < buf_len; i++)
         buf[i] &= 0x7f;
+}
+
+void uart_impl::clear_high_bits_rx(int start, int end)
+{
+    if (start < 0) {
+        clear_high_bits(rx_buf + UART_RX_BUF_LEN + start, -start);
+        start = 0;
+    }
+    clear_high_bits(rx_buf + start, end - start);
 }
