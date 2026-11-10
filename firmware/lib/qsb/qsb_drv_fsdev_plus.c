@@ -13,9 +13,6 @@
 //
 
 #include "qsb_config.h"
-
-#if QSB_ARCH == QSB_ARCH_FSDEV && defined(QSB_FSDEV_DBL_BUF)
-
 #include "qsb_fsdev.h"
 #include "qsb_drv_fsdev_btable.h"
 #include "qsb_fsdev_ep.h"
@@ -71,9 +68,7 @@ qsb_device* create_port_fs(void)
 
     // Enable RESET, SUSPEND, RESUME and CTR interrupts.
     USB_CNTR = USB_CNTR_RESETM | USB_CNTR_CTRM | USB_CNTR_SUSPM | USB_CNTR_WKUPM;
-#if QSB_FSDEV_SUBTYPE >= 3
     USB_BCDR = USB_BCDR_DPPU;
-#endif
     return &device_fsdev;
 }
 
@@ -600,7 +595,6 @@ void qsb_dev_poll(qsb_device* dev)
     }
 }
 
-#if QSB_FSDEV_SUBTYPE >= 3
 void qsb_dev_disconnect(__attribute__((unused)) qsb_device* dev, bool disconnected)
 {
     if (disconnected) {
@@ -609,6 +603,3 @@ void qsb_dev_disconnect(__attribute__((unused)) qsb_device* dev, bool disconnect
         USB_BCDR |= USB_BCDR_DPPU;
     }
 }
-#endif
-
-#endif

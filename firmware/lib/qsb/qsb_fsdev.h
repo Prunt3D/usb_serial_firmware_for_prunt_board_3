@@ -126,8 +126,6 @@
 // Endpoint kind bits for USB_EP_KIND
 #define USB_EP_KIND_DBL_BUF     0x0100 // Double buffering
 
-#if QSB_FSDEV_SUBTYPE >= 2
-
 // --- Link power management register definitions ----------------------------------------------
 
 #define USB_LPMCSR MMIO32(USB_DEV_FS_BASE + 0x54)
@@ -150,10 +148,6 @@
 #define USB_LPMCSR_LPMACK  (1 << 1)
 #define USB_LPMCSR_LPMEN   (1 << 0)
 
-#endif
-
-#if QSB_FSDEV_SUBTYPE >= 3
-
 // --- Battery charging register definitions ----------------------------------------------------------
 
 #define USB_BCDR MMIO32(USB_DEV_FS_BASE + 0x58)
@@ -169,5 +163,3 @@
 #define USB_BCDR_PDEN      (1 << 2)
 #define USB_BCDR_DCDEN     (1 << 1)
 #define USB_BCDR_BCDEN     (1 << 0)
-
-#endif

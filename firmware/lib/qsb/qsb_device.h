@@ -53,11 +53,6 @@ typedef qsb_device* (*qsb_port)(void);
 /// USB full-speed port (PA12 and PA11)
 extern qsb_port qsb_port_fs;
 
-#if QSB_ARCH == QSB_ARCH_DWC
-/// USB high-speed port (TODO)
-extern qsb_port qsb_port_hs;
-#endif
-
 /**
  * @brief Initializes USB device.
  *

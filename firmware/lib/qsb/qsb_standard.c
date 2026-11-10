@@ -267,12 +267,6 @@ static qsb_request_return_code set_address(
     if (req->bmRequestType != 0 || req->wValue >= 128)
         return QSB_REQ_NOTSUPP;
 
-#if QSB_ARCH == QSB_ARCH_DWC
-    // Special workaround for STM32F10[57] that require the address
-    // to be set here. This is undocumented!
-    qsb_internal_dev_set_address(dev, req->wValue);
-#endif
-
     return QSB_REQ_HANDLED;
 }
 

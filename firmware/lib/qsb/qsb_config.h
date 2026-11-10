@@ -12,29 +12,10 @@
 
 #pragma once
 
-#define QSB_ARCH_FSDEV 1
-#define QSB_ARCH_DWC 2
-
 #define QSB_STR_ENC_LATIN1 1
 #define QSB_STR_ENC_UTF8 2
 
 // Configuration flags:
-// QSB_ARCH: Defines the architecture of the USB peripheral.
-//     Valid values are:
-//         QSB_ARCH_FSDEV (1): USB full-speed device interface (the USB peripheral without host, OTG and high-speed support)
-//         QSB_ARCH_DWC (2): DesignWare Core (usually called USB OTG FS or USB OTG HS)
-//
-// QSB_FSDEV_SUBTYPE: Defines the subtype of the USB full-speed device interfaces.
-//     Valid values depend on the availablity of the USB_LPMCSR and USB_BCDR register
-//         1: has neither USB_LPMCSR nor USB_BCDR register
-//         2: has USB_LPMCSR but not USB_BCDR register
-//         3: has USB_LPMCSR and USB_BCDR register
-//
-// QSB_FSDEV_BTABLE_TYPE: Indicates the size of a BTABLE entry (for USB full-speed device interface)
-//     Valid values are:
-//         2: 16-bit organization, i.e. BTABLE is accessed with half-word access
-//         4: 32-bit organization, i.e. BTABLE is accessed with word access, the upper half being empty
-//
 // QSB_STR_ENC: Selects the encoding of strings provided as input for string descriptors.
 //     According to the USB standard, string descriptors are always transmitted with UTF-16 encoding.
 //     The QSB library however uses a single byte API. If this flag is not defined, `QSB_STR_UTF8` can be
@@ -60,57 +41,9 @@
 // QSB_WIN_WCID_VENDOR_CODE: If WCID descriptors is enabled, this macro can be defined to set the
 //     vendor code used in the WCID control request. The default value is 0xF0. 
 
-#if !defined(QSB_ARCH)
-#if defined(STM32F0)
-#define QSB_ARCH QSB_ARCH_FSDEV
-#define QSB_FSDEV_SUBTYPE 3
-#elif defined(STM32F1)
-#define QSB_ARCH QSB_ARCH_FSDEV
-#define QSB_FSDEV_SUBTYPE 1
-#elif defined(STM32F2)
-#define QSB_ARCH QSB_ARCH_DWC
-#elif defined(STM32F3)
-#define QSB_ARCH QSB_ARCH_FSDEV
-#define QSB_FSDEV_SUBTYPE 2
-#elif defined(STM32F4)
-#define QSB_ARCH QSB_ARCH_DWC
-#elif defined(STM32F7)
-#define QSB_ARCH QSB_ARCH_DWC
-#elif defined(STM32L0)
-#define QSB_ARCH QSB_ARCH_FSDEV
-#define QSB_FSDEV_SUBTYPE 3
-#elif defined(STM32L1)
-#define QSB_ARCH QSB_ARCH_FSDEV
-#define QSB_FSDEV_SUBTYPE 1
-#elif defined(STM32L4)
-#define QSB_ARCH QSB_ARCH_FSDEV
-#define QSB_FSDEV_SUBTYPE 3
-#elif defined(STM32G4)
-#define QSB_ARCH QSB_ARCH_FSDEV
-#define QSB_FSDEV_SUBTYPE 3
-#else
-#error "Please define QSB_ARCH"
-#endif
-#endif
-
-#if QSB_ARCH == QSB_ARCH_FSDEV && !defined(QSB_FSDEV_BTABLE_TYPE)
-#if defined(STM32F0)
-#define QSB_FSDEV_BTABLE_TYPE 2
-#elif defined(STM32F1)
-#define QSB_FSDEV_BTABLE_TYPE 4
-#elif defined(STM32F3)
-#define QSB_FSDEV_BTABLE_TYPE 2
-#elif defined(STM32L0)
-#define QSB_FSDEV_BTABLE_TYPE 2
-#elif defined(STM32L1)
-#define QSB_FSDEV_BTABLE_TYPE 4
-#elif defined(STM32L4)
-#define QSB_FSDEV_BTABLE_TYPE 2
-#elif defined(STM32G4)
-#define QSB_FSDEV_BTABLE_TYPE 2
-#else
-#error "Invalid configuration value for QSB_ARCH"
-#endif
+// This copy only supports the USB peripheral of the STM32F0 (16-bit BTABLE, with USB_BCDR).
+#if !defined(STM32F0)
+#error "This USB stack only supports the STM32F0"
 #endif
 
 #ifndef QSB_STR_ENC

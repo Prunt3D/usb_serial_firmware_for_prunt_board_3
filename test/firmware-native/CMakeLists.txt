@@ -14,7 +14,7 @@ if(NOT EXISTS "${LIBOPENCM3_INCLUDE}/libopencm3/cm3/common.h")
     message(FATAL_ERROR "libopencm3 not found. Build the firmware once with PlatformIO, or set LIBOPENCM3_INCLUDE.")
 endif()
 
-add_compile_definitions(STM32F0 QSB_FSDEV_DBL_BUF)
+add_compile_definitions(STM32F0)
 
 # The firmware is written for a 32-bit MCU, so a host compiler has plenty to say about it, and it
 # casts pointers to uint32_t for the DMA registers, which needs -fpermissive on a 64-bit host.

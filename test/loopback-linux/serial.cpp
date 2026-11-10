@@ -56,7 +56,8 @@ void serial_port::open(const char* path, int bit_rate, int data_bits, bool with_
     clear_bits(options.c_oflag, OPOST | ONLCR | OCRNL);
     set_bits(options.c_oflag, 0);
     clear_bits(options.c_cflag, PARENB | PARODD | CSTOPB | CSIZE | CBAUD);
-    set_bits(options.c_cflag, CRTSCTS | CLOCAL | CREAD | BOTHER);
+    clear_bits(options.c_cflag, CRTSCTS);
+    set_bits(options.c_cflag, CLOCAL | CREAD | BOTHER);
     clear_bits(options.c_lflag, ICANON | IEXTEN | ISIG | ECHO | ECHOE | ECHONL);
     set_bits(options.c_lflag, 0);
     

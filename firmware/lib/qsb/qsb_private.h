@@ -16,12 +16,7 @@
 #include "qsb_config.h"
 #include "qsb_device.h"
 
-#if QSB_ARCH == QSB_ARCH_DWC
-#include "qsb_otg_common.h"
-#define QSB_NUM_ENDPOINTS 4
-#else
 #define QSB_NUM_ENDPOINTS 8
-#endif
 
 #define QSB_MAX_CONTROL_CALLBACKS 4
 #define QSB_MAX_SET_CONFIG_CALLBACKS 4
@@ -40,10 +35,6 @@ static inline uint32_t imin(uint32_t a, uint32_t b)
 
 /** Internal collection of device information. */
 struct qsb_internal_device {
-#if QSB_ARCH == QSB_ARCH_DWC
-    qsb_otg* otg;
-#endif
-
     // -- descriptor data structures
     const qsb_device_desc* desc;
     const qsb_config_desc* config;
@@ -103,35 +94,11 @@ struct qsb_internal_device {
     const qsb_bos_device_capability_desc* const* bos_descs;
 #endif
 
-#if QSB_ARCH == QSB_ARCH_FSDEV
-
     // private implementation data for USB full-speed device peripheral
 
     uint16_t pm_top; // Top of allocated endpoint buffer memory
     uint8_t ep_state_rx[QSB_NUM_ENDPOINTS];
     uint8_t ep_state_tx[QSB_NUM_ENDPOINTS];
-
-#elif QSB_ARCH == QSB_ARCH_DWC
-
-    // private implementation data for the DesignWare USB core
-
-    uint16_t rx_fifo_size;
-    uint16_t fifo_mem_top;
-    uint16_t fifo_mem_top_ep0;
-    uint8_t force_nak[QSB_NUM_ENDPOINTS];
-
-    /// Initial state of OUT endpoint size register (basically maximum packet size)
-    uint32_t doeptsiz[QSB_NUM_ENDPOINTS];
-    /// Buffer size of IN endpoints
-    uint32_t tx_buf_size[QSB_NUM_ENDPOINTS];
-
-    /// Number of bytes submitted for transmission
-    uint16_t tx_pkt_len[QSB_NUM_ENDPOINTS];
-
-    /// Number of bytes of next packet in RX FIFO
-    uint16_t rx_pkt_len;
-
-#endif
 };
 
 typedef enum { QSB_TRANSACTION_IN = 0, QSB_TRANSACTION_OUT = 1, QSB_TRANSACTION_SETUP = 2 } qsb_internal_dev_transaction;
@@ -238,6 +205,4 @@ void qsb_internal_ep_reset(qsb_device* device);
 
 void qsb_internal_dev_set_address(qsb_device* device, uint8_t addr);
 
-#if defined(QSB_ARCH_FSDEV)
 typedef enum { qsb_offset_tx = 0, qsb_offset_db0 = 0, qsb_offset_rx = 1, qsb_offset_db1 = 1 } qsb_buf_desc_offset;
-#endif

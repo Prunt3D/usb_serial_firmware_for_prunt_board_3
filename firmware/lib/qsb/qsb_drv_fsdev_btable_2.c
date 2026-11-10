@@ -16,10 +16,6 @@
 // to unexpected results. It must always be access with 16-bit half word operations.
 //
 
-#include "qsb_config.h"
-
-#if QSB_ARCH == QSB_ARCH_FSDEV && QSB_FSDEV_BTABLE_TYPE == 2
-
 #include "qsb_drv_fsdev_btable.h"
 #include <libopencm3/stm32/memorymap.h>
 
@@ -129,5 +125,3 @@ uint32_t qsb_fsdev_copy_from_pma(uint8_t* buf, uint32_t len, uint8_t ep, qsb_buf
 
     return len;
 }
-
-#endif

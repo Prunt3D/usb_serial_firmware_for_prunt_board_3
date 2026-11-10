@@ -4,15 +4,6 @@
 			"path": "firmware"
 		},
 		{
-			"path": "throttler"
-		},
-		{
-			"path": "hardware"
-		},
-		{
-			"path": "doc"
-		},
-		{
 			"path": "support"
 		}
 	],

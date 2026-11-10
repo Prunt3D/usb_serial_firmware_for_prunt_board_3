@@ -15,64 +15,8 @@
 #include <string.h>
 
 
-#ifndef QSB_UID_BASE
-
-#if defined(STM32F0)
-
+// Unique device ID register of the STM32F0
 #define QSB_UID_BASE 0x1FFFF7AC
-
-#elif defined(STM32F1)
-
-#define QSB_UID_BASE 0x1FFFF7E8
-
-#elif defined(STM32F2)
-
-#define QSB_UID_BASE 0x1FFF7A10
-
-#elif defined(STM32F3)
-
-#define QSB_UID_BASE 0x1FFFF7AC
-
-#elif defined(STM32F4)
-
-#define QSB_UID_BASE 0x1FFF7A10
-
-#elif defined(STM32F7)
-
-#error "The STM32F7 family uses various addresses for the Unique device ID register. Please look it up in the reference manual and define QSB_UID_BASE"
-
-#elif defined(STM32G0)
-
-// The STM32G0 familiy does not provide a unique device ID
-#define QSB_UID_BASE 0x0
-
-#elif defined(STM32G4)
-
-#define QSB_UID_BASE 0x1FFF7590
-
-#elif defined(STM32H7)
-
-#define QSB_UID_BASE 0x1FF1E800
-
-#elif defined(STM32L0)
-
-#define QSB_UID_BASE 0x1FF80050
-
-#elif defined(STM32L1)
-
-#define QSB_UID_BASE 0x1FF80050
-
-#elif defined(STM32L4)
-
-#define QSB_UID_BASE 0x1FFF7590
-
-#elif
-
-#error "Unknown processor family; have you defined STM32F1 or a similar macro?"
-
-#endif
-
-#endif
 
 
 // Sample for UID:
