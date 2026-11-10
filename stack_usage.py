@@ -219,57 +219,122 @@ def findStackUsage(
     return (totalStackUsage, maxStackPath[:])
 
 
-# Calls through function pointers can't be followed in the disassembly, so this lists the
-# possible targets of each function that makes one. An empty list means that no target is
-# registered in this firmware. main() fails if this table falls out of step with the ELF.
+# Calls through function pointers can't be followed in the disassembly, so this lists, for each
+# function that makes them, how many it makes and their possible targets. An empty list means that
+# no target is registered in this firmware. main() fails if this table falls out of step with the
+# ELF: if a function listed here is missing, makes a different number of calls, or names a target
+# that's missing. The number catches a call that inlining moves into another function listed here.
+# On ARM, it also fails if the ELF takes the address of a function that isn't listed as a target,
+# or lists a target whose address it doesn't take, which catches a callback registered where an
+# indirect call already exists. Whether each target is listed under the right caller is still up to
+# whoever registers it.
 INDIRECT_CALLS = {
     # The port in qsb_dev_init(), and the endpoint callbacks
-    "qsb_dev_init": ["create_port_fs"],
-    "ep_callback": [
+    "qsb_dev_init": (1, ["create_port_fs"]),
+    "ep_callback": (1, [
         "qsb_internal_control_in",
         "qsb_internal_control_out",
         "qsb_internal_control_setup",
         "_ZL14usb_comm_in_cbP19qsb_internal_devicehm",
         "_ZL14usb_data_in_cbP19qsb_internal_devicehm",
         "_ZL15usb_data_out_cbP19qsb_internal_devicehm",
-    ],
+    ]),
     # Suspend, resume and SOF callbacks, none of which are registered
-    "qsb_dev_poll": [],
-    "qsb_internal_dev_reset": ["_ZL9usb_resetv"],
+    "qsb_dev_poll": (3, []),
+    "qsb_internal_dev_reset": (1, ["_ZL9usb_resetv"]),
     # Control requests
-    "dispatch_request": [
+    "dispatch_request": (1, [
         "_ZL19cdc_control_requestP19qsb_internal_deviceP14qsb_setup_dataPPhPtPPFvS0_S2_E",
         "_ZL22vendor_control_requestP19qsb_internal_deviceP14qsb_setup_dataPPhPtPPFvS0_S2_E",
-    ],
-    "qsb_internal_standard_request_device": [
+    ]),
+    "qsb_internal_standard_request_device": (1, [
         "device_get_status",
         "get_configuration",
         "get_descriptor",
         "set_address",
         "set_configuration",
-    ],
-    "qsb_internal_standard_request_endpoint": [
+    ]),
+    "qsb_internal_standard_request_endpoint": (1, [
         "endpoint_get_status",
         "endpoint_stall",
         "endpoint_unstall",
-    ],
-    "qsb_internal_standard_request_interface": [
+    ]),
+    "qsb_internal_standard_request_interface": (1, [
         "get_interface",
         "interface_get_status",
         "set_interface",
-    ],
-    "set_configuration": ["_ZL14cdc_set_configP19qsb_internal_devicet"],
-    "set_interface": [],
-    "qsb_internal_control_in": ["_ZL34bootloader_entry_control_completedP19qsb_internal_deviceP14qsb_setup_data"],
-    "qsb_internal_control_out": ["_ZL34bootloader_entry_control_completedP19qsb_internal_deviceP14qsb_setup_data"],
+    ]),
+    "set_configuration": (1, ["_ZL14cdc_set_configP19qsb_internal_devicet"]),
+    "set_interface": (1, []),
+    "qsb_internal_control_in": (1, ["_ZL34bootloader_entry_control_completedP19qsb_internal_deviceP14qsb_setup_data"]),
+    "qsb_internal_control_out": (1, ["_ZL34bootloader_entry_control_completedP19qsb_internal_deviceP14qsb_setup_data"]),
     # A long call into RAM
-    "_Z40bootloader_enter_system_memory_boot_modev": ["_ZL47erase_boot_trigger_page_and_reload_option_bytesv"],
+    "_Z40bootloader_enter_system_memory_boot_modev": (1, ["_ZL47erase_boot_trigger_page_and_reload_option_bytesv"]),
     # The constructor and destructor arrays, which are empty
-    "reset_handler": [],
+    "reset_handler": (3, []),
 }
 
 
-def AddIndirectCalls(callGraph: CallGraph, indirectCallers: Set[FunctionName]) -> None:
+# Functions whose address the ELF takes, outside the vector table, without calling them through a
+# pointer
+ADDRESS_TAKEN_NOT_CALLED = set()  # type: Set[FunctionName]
+
+
+def GetAddressTakenFunctions(objdump: str, readelf: str, elf_binary: str) -> Set[FunctionName]:
+    """
+    The functions whose address, with the Thumb bit set, is a 4-byte aligned word in the ELF. ARMv6-M
+    code can only get a function's address from such a word, in a literal pool or in a table. The
+    vector table is left out, as only the hardware calls those.
+    """
+    functionsAt = {}  # type: Dict[int, Set[FunctionName]]
+    vectorTable = (0, 0)
+    for line in os.popen(readelf + " -sW \"" + elf_binary + "\"").readlines():
+        data = line.split()
+        if len(data) < 8:
+            continue
+        if data[3] == 'FUNC':
+            functionsAt.setdefault(int(data[1], 16), set()).add(data[7])
+        elif data[3] == 'OBJECT' and data[7] == 'vector_table':
+            vectorTable = (int(data[1], 16), int(data[1], 16) + int(data[2]))
+
+    sectionPattern = Matcher(r'^Contents of section (\S+):')
+    bytesPattern = Matcher(r'^ ([0-9a-f]+) ((?:[0-9a-f]{2,8} ){1,4})')
+    addressTaken = set()  # type: Set[FunctionName]
+    for line in os.popen(objdump + " -s \"" + elf_binary + "\"").readlines():
+        if sectionPattern.match(line) or not bytesPattern.match(line):
+            continue
+        offset = int(bytesPattern.group(1), 16)
+        data = bytes.fromhex("".join(bytesPattern.group(2).split()))
+        for i in range(-offset % 4, len(data) - 3, 4):
+            if vectorTable[0] <= offset + i < vectorTable[1]:
+                continue
+            addressTaken |= functionsAt.get(int.from_bytes(data[i:i + 4], 'little'), set())
+    return addressTaken
+
+
+def CheckAddressTakenFunctions(addressTaken: Set[FunctionName]) -> None:
+    """
+    Stop if a function whose address is taken isn't listed as a target in INDIRECT_CALLS, or the
+    other way around.
+    """
+    targets = set()  # type: Set[FunctionName]
+    for unused_count, callees in INDIRECT_CALLS.values():
+        targets.update(callees)
+
+    errors = [
+        f"the ELF takes the address of {fn}, but INDIRECT_CALLS doesn't list it as a target"
+        for fn in sorted(addressTaken - targets - ADDRESS_TAKEN_NOT_CALLED)
+    ]
+    errors += [
+        f"INDIRECT_CALLS lists {fn} as a target, but the ELF doesn't take its address"
+        for fn in sorted(targets - addressTaken)
+    ]
+    if errors:
+        print("\n".join(errors), file=sys.stderr)
+        sys.exit(1)
+
+
+def AddIndirectCalls(callGraph: CallGraph, indirectCalls: FunctionNameToInt) -> None:
     """
     Add the targets of function pointer calls to the call graph. Stop if the table doesn't match
     the ELF, because stack use on those paths would silently be left out of the result.
@@ -277,11 +342,15 @@ def AddIndirectCalls(callGraph: CallGraph, indirectCallers: Set[FunctionName]) -
 
     errors = [
         f"{caller} makes an indirect call that INDIRECT_CALLS doesn't list"
-        for caller in sorted(indirectCallers - INDIRECT_CALLS.keys())
+        for caller in sorted(indirectCalls.keys() - INDIRECT_CALLS.keys())
     ]
-    for caller, callees in INDIRECT_CALLS.items():
+    for caller, (count, callees) in INDIRECT_CALLS.items():
         if caller not in callGraph:
+            errors.append(f"INDIRECT_CALLS lists {caller}, but it isn't in the ELF")
             continue
+        found = indirectCalls.get(caller, 0)
+        if found != count:
+            errors.append(f"{caller} makes {found} indirect calls, but INDIRECT_CALLS expects {count}")
         errors += [
             f"INDIRECT_CALLS lists {callee}, called by {caller}, but it isn't in the ELF"
             for callee in callees if callee not in callGraph
@@ -294,7 +363,8 @@ def AddIndirectCalls(callGraph: CallGraph, indirectCallers: Set[FunctionName]) -
 
 
 def ParseCmdLineArgs(cross_prefix: str) -> Tuple[
-        str, str, Matcher, Matcher, Matcher]:
+        str, str, Optional[str], Matcher, Matcher, Matcher]:
+    readelf = None
     if cross_prefix:
         objdump = cross_prefix + 'objdump'
         nm = cross_prefix + 'nm'
@@ -332,14 +402,17 @@ def ParseCmdLineArgs(cross_prefix: str) -> Tuple[
         elif arm.search(binarySignature):
             objdump = 'arm-none-eabi-objdump'
             nm = 'arm-none-eabi-nm'
-            functionNamePattern = Matcher(r'^(\S+) <([a-zA-Z0-9_]+?)>:')
-            callPattern = Matcher(r'^.*bl\s+\S+\s+<([a-zA-Z0-9_]+)>')
+            readelf = 'arm-none-eabi-readelf'
+            # GCC can add a suffix to a function it clones, as in foo.constprop.0. Names starting
+            # with a dot are labels inside a library function.
+            functionNamePattern = Matcher(r'^(\S+) <([a-zA-Z_][a-zA-Z0-9_.]*?)>:')
+            callPattern = Matcher(r'^.*bl\s+\S+\s+<([a-zA-Z_][a-zA-Z0-9_.]*)>')
             stackUsagePattern = Matcher(
                 r'^.*sub.*sp, (#[0-9][0-9]*)')
         else:
             print("Unknown signature:", binarySignature, "please use -cross")
             sys.exit(1)
-    return objdump, nm, functionNamePattern, callPattern, stackUsagePattern
+    return objdump, nm, readelf, functionNamePattern, callPattern, stackUsagePattern
 
 
 def GetSizeOfSymbols(nm: str, elf_binary: str) -> Tuple[
@@ -401,13 +474,13 @@ def GetCallGraph(
         objdump: str,
         offsetOfSymbol: FunctionNameToInt, sizeOfSymbol: FunctionNameToInt,
         functionNamePattern: Matcher, stackUsagePattern: Matcher,
-        callPattern: Matcher) -> Tuple[CallGraph, FunctionNameToInt, Set[FunctionName]]:
+        callPattern: Matcher) -> Tuple[CallGraph, FunctionNameToInt, FunctionNameToInt]:
 
     # Parse disassembly to create callgraph (use objdump -d)
     functionName = ""
     stackUsagePerFunction = {}  # type: FunctionNameToInt
     callGraph = {}              # type: CallGraph
-    indirectCallers = set()     # type: Set[FunctionName]
+    indirectCalls = {}          # type: FunctionNameToInt
     insideFunctionBody = False
 
     offsetPattern = Matcher(r'^([0-9A-Za-z]+):')
@@ -462,7 +535,7 @@ def GetCallGraph(
                     calledFunctions.add(calledFunction)
 
             if functionName != "" and indirectCallPattern.match(line.rstrip()):
-                indirectCallers.add(functionName)
+                indirectCalls[functionName] = indirectCalls.get(functionName, 0) + 1
 
             # Check to see if we have a stack reduction opcode
             #  8048bec:       83 ec 04                sub    $0x46,%esp
@@ -490,7 +563,7 @@ def GetCallGraph(
     # for fn,v in stackUsagePerFunction.items():
     #    print fn,v
     #    print "CALLS:", callGraph[fn]
-    return callGraph, stackUsagePerFunction, indirectCallers
+    return callGraph, stackUsagePerFunction, indirectCalls
 
 
 def ReadSU(
@@ -564,15 +637,17 @@ def main() -> None:
         print("\nNote that if you use '-cross', SPARC opcodes are assumed.\n")
         sys.exit(1)
 
-    objdump, nm, functionNamePattern, callPattern, stackUsagePattern = \
+    objdump, nm, readelf, functionNamePattern, callPattern, stackUsagePattern = \
         ParseCmdLineArgs(cross_prefix)
     sizeOfSymbol, offsetOfSymbol = GetSizeOfSymbols(nm, sys.argv[-2])
     symbolAliases = GetSymbolAliases(nm, sys.argv[-2])
-    callGraph, stackUsagePerFunction, indirectCallers = GetCallGraph(
+    callGraph, stackUsagePerFunction, indirectCalls = GetCallGraph(
         objdump,
         offsetOfSymbol, sizeOfSymbol,
         functionNamePattern, stackUsagePattern, callPattern)
-    AddIndirectCalls(callGraph, indirectCallers)
+    AddIndirectCalls(callGraph, indirectCalls)
+    if readelf:
+        CheckAddressTakenFunctions(GetAddressTakenFunctions(objdump, readelf, sys.argv[-2]))
 
     supf, suData = GetSizesFromSUfiles(sys.argv[-1], symbolAliases)
     alreadySeen = set()  # type: Set[Filename]
