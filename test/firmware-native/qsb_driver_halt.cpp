@@ -180,5 +180,16 @@ int main()
     dbl_buf_read_rx(dev, 1);
     check("EP1 halted: handling CTR_RX leaves double buffering off", (endpoint_registers[1].value & USB_EP_KIND) == 0);
 
+    // SET_CONFIGURATION(0) disables the endpoints, whether they're halted or not
+    static qsb_device_desc device_desc = {};
+    device_desc.bMaxPacketSize0 = 16;
+    dev->desc = &device_desc;
+    qsb_dev_ep_setup(dev, 0x82, QSB_ENDPOINT_ATTR_BULK, 128, callback);
+    qsb_internal_ep_reset(dev);
+    check("resetting endpoints disables EP1, which was halted", stat_rx(1) == USB_EP_STAT_RX_DISABLED);
+    check("resetting endpoints disables EP2", stat_tx(2) == USB_EP_STAT_TX_DISABLED);
+    check("  and turns double buffering off",
+        (endpoint_registers[1].value & USB_EP_KIND) == 0 && (endpoint_registers[2].value & USB_EP_KIND) == 0);
+
     return check_result();
 }

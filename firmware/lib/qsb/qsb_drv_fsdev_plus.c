@@ -215,20 +215,6 @@ void qsb_dev_ep_setup(qsb_device* dev, uint8_t addr, uint32_t type, int buffer_s
     }
 }
 
-void qsb_internal_ep_reset(qsb_device* dev)
-{
-    // Reset all endpoints
-    for (int i = 1; i < 8; i++) {
-        qsb_ep_stat_tx_set(i, USB_EP_STAT_TX_DISABLED);
-        qsb_ep_stat_rx_set(i, USB_EP_STAT_RX_DISABLED);
-        // Turn double buffering off so that it starts over when qsb_dev_ep_setup() sets it again.
-        qsb_ep_set_all_rw_bits(i, i);
-        dev->ep_state_rx[i] = 0;
-        dev->ep_state_tx[i] = 0;
-    }
-    dev->pm_top = PM_TOP_INIT + 2 * dev->desc->bMaxPacketSize0;
-}
-
 // The actual TX status of a double-buffered endpoint. VALID reads as NAK during a buffer conflict,
 // and it's never really NAK.
 static uint32_t dbl_buf_stat_tx(uint8_t ep)
@@ -243,6 +229,28 @@ static uint32_t dbl_buf_stat_rx(uint8_t ep)
 {
     uint32_t stat = USB_EP(ep) & USB_EP_STAT_RX;
     return stat == USB_EP_STAT_RX_NAK ? USB_EP_STAT_RX_VALID : stat;
+}
+
+void qsb_internal_ep_reset(qsb_device* dev)
+{
+    // Reset all endpoints
+    for (int i = 1; i < 8; i++) {
+        // With double buffering on, STAT can't be trusted when read, and toggling it from what it
+        // reads can leave the endpoint stalled instead of disabled. So disable a double-buffered
+        // endpoint based on what its status must actually be, in the same write that turns double
+        // buffering off. Double buffering then starts over when qsb_dev_ep_setup() sets it again.
+        if (dev->ep_state_tx[i] == dbl_buf_en)
+            qsb_ep_set_rw_bits_and_stat(i, i, dbl_buf_stat_tx(i), USB_EP_STAT_TX_DISABLED);
+        if (dev->ep_state_rx[i] >= dbl_buf_ready_0)
+            qsb_ep_set_rw_bits_and_stat(i, i, dbl_buf_stat_rx(i), USB_EP_STAT_RX_DISABLED);
+
+        qsb_ep_stat_tx_set(i, USB_EP_STAT_TX_DISABLED);
+        qsb_ep_stat_rx_set(i, USB_EP_STAT_RX_DISABLED);
+        qsb_ep_set_all_rw_bits(i, i);
+        dev->ep_state_rx[i] = 0;
+        dev->ep_state_tx[i] = 0;
+    }
+    dev->pm_top = PM_TOP_INIT + 2 * dev->desc->bMaxPacketSize0;
 }
 
 /**
