@@ -21,8 +21,9 @@ uint32_t millis()
 
 void delay(uint32_t ms)
 {
-	int32_t target_time = millis_count + ms;
-	while (target_time - (int32_t)millis_count > 0)
+	// Unsigned, so that the subtraction wraps instead of overflowing.
+	uint32_t start_time = millis_count;
+	while (millis_count - start_time < ms)
 		;
 }
 
