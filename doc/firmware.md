@@ -46,7 +46,7 @@ When the host first reads from the *data in* endpoint after configuration, or af
 
 The line coding returns to the default, 9600 8N1, at every SET_CONFIGURATION.
 
-A change takes effect once the UART has sent everything queued before the request. Data that arrives after the request waits and goes out with the new settings, and the UART keeps receiving with the old settings until then. GET_LINE_CODING reports the new settings straight away. A request for the settings already in use does nothing, so it doesn't disturb the UART.
+A change takes effect once the UART has sent everything queued before the request. Data that arrives after the request waits and goes out with the new settings, and the UART keeps receiving with the old settings until then. GET_LINE_CODING reports the new settings straight away. A request for the settings already in use does nothing, so it doesn't disturb the UART. If a change is still waiting when the host asks for the settings in use again, the change is cancelled. If the host asks for several changes before the UART has sent what was queued, only the last one takes effect, and the data queued in between goes out with the settings from before them.
 
 A baud rate of 75 selects 6 Mbaud, as Linux doesn't easily allow rates above 4 Mbaud.
 

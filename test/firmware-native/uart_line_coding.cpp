@@ -76,6 +76,22 @@ int main()
     check("repeating a pending change keeps its queue position", uart.coding_change_tx_pos == queue_pos);
     check("  and the change is still pending", uart.is_coding_change_pending);
 
+    // Going back to the settings in use cancels a change that's still waiting
+    restart();
+    uart.transmit(tx_data, sizeof(tx_data));
+    enables = stub_usart_enable_count;
+    uart.set_coding(115200, 8, uart_stopbits::_1_0, uart_parity::none);
+    uart.transmit(tx_data, sizeof(tx_data));
+    uart.set_coding(9600, 8, uart_stopbits::_1_0, uart_parity::none);
+    check("going back to the settings in use cancels a waiting change", !uart.is_coding_change_pending);
+    check("  and GET_LINE_CODING reports them", uart.baudrate() == 9600);
+    for (int i = 0; i < 3; i++) {
+        stub_tx_dma_done = 1;
+        uart.poll();
+    }
+    check("  and the USART isn't restarted once TX drains",
+        uart.tx_buf_tail == uart.tx_buf_head && stub_usart_enable_count == enables);
+
     // enable() applies the default settings, even if they're already selected
     restart();
     enables = stub_usart_enable_count;

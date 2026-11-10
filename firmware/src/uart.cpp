@@ -333,6 +333,14 @@ void uart_impl::set_coding(int baudrate, int databits, uart_stopbits stopbits, u
     _stopbits = stopbits;
     _parity = parity;
 
+    // Going back to the settings the USART is using cancels a change that hasn't been applied yet,
+    // rather than restarting the USART with the settings it already has.
+    if (is_coding_change_pending && baudrate == usart_baudrate && databits == usart_databits
+        && stopbits == usart_stopbits && parity == usart_parity) {
+        is_coding_change_pending = false;
+        return;
+    }
+
     // Everything queued so far was written for the old settings. If several changes arrive
     // before the queue drains, only the last one takes effect, once its queue has drained.
     coding_change_tx_pos = tx_buf_head;
@@ -366,6 +374,10 @@ void uart_impl::apply_coding()
     usart_set_stopbits(USART, stopbits_enum_to_uint32[(int)_stopbits]);
     usart_set_parity(USART, parity_enum_to_uint32[(int)_parity]);
     usart_enable(USART);
+
+    usart_baudrate = _baudrate;
+    usart_stopbits = _stopbits;
+    usart_parity = _parity;
 
     // High water mark is buffer size - 5ms worth of data
     rx_high_water_mark = std::max(UART_RX_BUF_LEN - _baudrate / 2000, 0);
