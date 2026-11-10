@@ -152,6 +152,11 @@ private:
     // Last serial state sent to host
     uint16_t last_serial_state;
 
+    // A notification has been submitted, and the host hasn't collected it yet
+    bool is_notification_queued;
+    // The serial state it reports
+    uint16_t queued_serial_state;
+
     // Timestamp of last data transmitted via USB (in milliseconds)
     uint32_t tx_timestamp;
 

@@ -27,6 +27,9 @@ constexpr uint32_t MIN_BAUD_RATE = 1200;
 constexpr uint32_t MAX_BAUD_RATE = 6000000;
 constexpr uint32_t LINUX_6M_BAUD_ALIAS = 75;
 
+// The signals in the serial state, as opposed to the errors
+constexpr uint16_t SERIAL_STATE_SIGNALS = QSB_PSTN_UART_STATE_RX_CARRIER | QSB_PSTN_UART_STATE_TX_CARRIER;
+
 static void usb_data_out_cb(qsb_device *dev, uint8_t ep, uint32_t len);
 static void usb_data_in_cb(qsb_device *dev, uint8_t ep, uint32_t len);
 static void usb_comm_in_cb(qsb_device *dev, uint8_t ep, uint32_t len);
@@ -45,6 +48,7 @@ void usb_serial_impl::on_usb_configured()
     needs_zlp = false;
     is_tx_high_water = false;
     last_serial_state = 0;
+    is_notification_queued = false;
     tx_timestamp = millis() - 100;
     pending_interrupt = 0;
 
@@ -96,6 +100,15 @@ void usb_serial_impl::poll()
 
     // Check for UART receive errors.
     pending_interrupt |= uart.take_errors();
+
+    // Clearing a halt on the notification endpoint, which SET_INTERFACE also does, drops a
+    // notification the host hasn't collected yet. The endpoint then has room again without the
+    // notification having been sent, so send its state again.
+    if (is_notification_queued && qsb_dev_ep_transmit_avail(usb_device, COMM_IN_1) > 0) {
+        is_notification_queued = false;
+        pending_interrupt |= queued_serial_state & ~SERIAL_STATE_SIGNALS;
+        last_serial_state = 0;
+    }
 
     uint16_t state = serial_state();
     if (state != last_serial_state)
@@ -207,7 +220,7 @@ uint16_t usb_serial_impl::serial_state()
 {
     // The board has no DCD or DSR signals, so report them as active rather than leave a host waiting
     // for them. macOS and BSD wait for DCD when opening /dev/tty* devices.
-    return pending_interrupt | QSB_PSTN_UART_STATE_RX_CARRIER | QSB_PSTN_UART_STATE_TX_CARRIER;
+    return pending_interrupt | SERIAL_STATE_SIGNALS;
 }
 
 void usb_serial_impl::send_serial_state()
@@ -227,8 +240,10 @@ void usb_serial_impl::notify_serial_state(uint16_t state)
 	buf[8] = state;
 	buf[9] = 0;
 	if (qsb_dev_ep_transmit_packet(usb_device, COMM_IN_1, buf, 10) == 10) {
-        last_serial_state = state & 0x3;
+        last_serial_state = state & SERIAL_STATE_SIGNALS;
         pending_interrupt = 0;
+        is_notification_queued = true;
+        queued_serial_state = state;
     }
 }
 
@@ -240,6 +255,8 @@ void usb_serial_impl::on_interrupt_occurred(usb_serial_interrupt interrupt)
 
 void usb_serial_impl::on_usb_ctrl_completed()
 {
+    is_notification_queued = false;
+
     uint16_t state = serial_state();
     if (state != last_serial_state)
         notify_serial_state(state);

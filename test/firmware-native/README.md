@@ -17,7 +17,7 @@ If libopencm3 isn't in PlatformIO's usual place, pass `-DLIBOPENCM3_INCLUDE=<pat
 |---|---|---|
 | `uart_rx_overrun` | `uart.cpp` | Over 4 million steps with a model of the circular DMA, no data is lost without an overrun being reported, and no overrun is reported without data being lost. |
 | `uart_line_coding` | `uart.cpp` | When a line coding change takes effect, how received data is masked until then, and that a request changing nothing leaves the USART alone. |
-| `usb_serial_state` | `usb_serial.cpp`, `uart.cpp` | What *SerialState* notifications contain, and that one refused by the USB stack stays pending. |
+| `usb_serial_state` | `usb_serial.cpp`, `uart.cpp` | What *SerialState* notifications contain, that one refused by the USB stack stays pending, and that one dropped before the host collects it is sent again. |
 | `usb_cdc_requests` | `usb_cdc.cpp` | That CDC class requests are only accepted while the device is configured. |
 | `qsb_driver_halt` | `qsb_drv_fsdev_plus.c` | Setting and clearing an endpoint halt: the data toggles, that nothing but the host ends a halt, and that no packets are read during one. |
 | `qsb_standard_requests` | `qsb_standard.c` | String descriptor reads of every length, and GET_STATUS on interfaces. |
