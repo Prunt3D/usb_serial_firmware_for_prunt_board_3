@@ -101,6 +101,22 @@ int main()
     result = qsb_dev_ep_transmit_packet(dev, 0, NULL, 0);
     check("EP0: the status of SET_FEATURE can still be sent", result == 0 && stat_tx(0) == USB_EP_STAT_TX_VALID);
 
+    // A SETUP arriving before the next packet of a control read is submitted ends that transfer
+    receive_setup();
+    qsb_dev_ep_transmit_packet(dev, 0, packet, sizeof(packet));
+    device_fsdev.ep_state_tx[0] = sgl_buf_0_pkts; // as after the host collected it
+    receive_setup();
+    endpoint_registers[0].value |= USB_EP_CTR_RX | USB_EP_SETUP;
+    result = qsb_dev_ep_transmit_packet(dev, 0, packet, sizeof(packet));
+    check("EP0: the next packet of a transfer that a SETUP ended is refused", result == -1);
+    check("  and EP0 keeps the NAK the SETUP set", stat_tx(0) == USB_EP_STAT_TX_NAK);
+    // As qsb_dev_poll() does before handling the SETUP
+    qsb_ep_ctr_rx_clear(0);
+    device_fsdev.ep_state_tx[0] = sgl_buf_0_pkts;
+    qsb_ep_stat_tx_set(0, USB_EP_STAT_TX_NAK);
+    result = qsb_dev_ep_transmit_packet(dev, 0, NULL, 0);
+    check("  but the response to the SETUP goes out", result == 0 && stat_tx(0) == USB_EP_STAT_TX_VALID);
+
     // Rejecting a request stalls EP0
     receive_setup();
     qsb_dev_ep_stall_set(dev, 0, 1);

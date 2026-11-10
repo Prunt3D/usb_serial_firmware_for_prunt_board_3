@@ -441,6 +441,15 @@ int qsb_dev_ep_transmit_packet(qsb_device* dev, uint8_t addr, const uint8_t* buf
         // submit a single packet in single buffering mode
         len = imin(len, 64);
         qsb_fsdev_copy_to_pma(ep, qsb_offset_tx, buf, len);
+
+        // A SETUP not yet handled ends the control transfer this packet belongs to, and the
+        // hardware has set NAK for it. Making the packet VALID would answer the new request's
+        // first IN token with it. The SETUP's own response is submitted after its CTR_RX is
+        // cleared, so it isn't held back. This is checked just before the write, as the SETUP can
+        // arrive at any time.
+        if (ep == 0 && (USB_EP(0) & (USB_EP_CTR_RX | USB_EP_SETUP)) == (USB_EP_CTR_RX | USB_EP_SETUP))
+            return -1;
+
         dev->ep_state_tx[ep] = sgl_buf_1_pkt;
         qsb_ep_stat_tx_set(ep, USB_EP_STAT_TX_VALID);
 
