@@ -1,5 +1,5 @@
 // Runs the real usb_cdc.cpp with the USB stack and usb_serial replaced by stubs, to check which CDC
-// class requests it accepts in which USB state.
+// class requests it accepts in which USB state and with which direction.
 
 #include <stdint.h>
 
@@ -69,6 +69,16 @@ int main()
 
     cdc_set_config(nullptr, 1);
     check("configured again: SET_LINE_CODING works", set_line_coding() == QSB_REQ_HANDLED && line_coding_sets == 2);
+
+    // The direction bit only matters if there's a data stage
+    check("SET_LINE_CODING sent as IN is rejected",
+        request(0xA1, QSB_PSTN_REQ_SET_LINE_CODING, 7) == QSB_REQ_NOTSUPP && line_coding_sets == 2);
+    check("GET_LINE_CODING sent as OUT is rejected",
+        request(0x21, QSB_PSTN_REQ_GET_LINE_CODING, 7) == QSB_REQ_NOTSUPP && line_coding_gets == 1);
+    check("SET_CONTROL_LINE_STATE sent as IN with no data stage works",
+        request(0xA1, QSB_PSTN_REQ_SET_CONTROL_LINE_STATE, 0) == QSB_REQ_HANDLED && line_state_sets == 2);
+    check("SET_CONTROL_LINE_STATE sent as IN with a data stage is rejected",
+        request(0xA1, QSB_PSTN_REQ_SET_CONTROL_LINE_STATE, 2) == QSB_REQ_NOTSUPP && line_state_sets == 2);
 
     return check_result();
 }

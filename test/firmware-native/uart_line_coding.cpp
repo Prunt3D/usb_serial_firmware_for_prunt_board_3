@@ -158,11 +158,31 @@ int main()
     check("  and the USART isn't restarted once TX drains",
         uart.tx_buf_tail == uart.tx_buf_head && stub_usart_enable_count == enables);
 
-    // enable() applies the default settings, even if they're already selected
+    // The change waits for the last byte to leave the USART, not just the DMA
     restart();
+    uart.transmit(tx_data, sizeof(tx_data));
     enables = stub_usart_enable_count;
+    uart.set_coding(19200, 8, uart_stopbits::_1_0, uart_parity::none);
+    stub_usart_isr = 0;
+    stub_tx_dma_done = 1;
+    uart.poll();
+    check("a change waits until TC is set", stub_usart_enable_count == enables && uart.is_coding_change_pending);
+    stub_usart_isr = USART_ISR_TC;
+    uart.poll();
+    check("  and is applied once it is", stub_usart_enable_count == enables + 1 && !uart.is_coding_change_pending);
+
+    // enable() applies the default settings, even if they're the ones already requested, as on a
+    // new configuration while a change back to them is still waiting
+    restart();
+    uart.set_coding(115200, 8, uart_stopbits::_1_0, uart_parity::none);
+    uart.poll();
+    uart.transmit(tx_data, sizeof(tx_data));
+    uart.set_coding(9600, 8, uart_stopbits::_1_0, uart_parity::none);
+    uart.transmit(tx_data, sizeof(tx_data));
+    const uint32_t brr_9600 = 48000000 / 9600;
+    check("  (a change back to 9600 is waiting)", uart.is_coding_change_pending && stub_usart_brr != brr_9600);
     uart.enable();
-    check("enable() applies the default line coding every time", stub_usart_enable_count > enables);
+    check("enable() applies the default line coding", stub_usart_brr == brr_9600);
     check("  and leaves nothing pending", !uart.is_coding_change_pending);
 
     return check_result();

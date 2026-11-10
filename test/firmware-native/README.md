@@ -16,11 +16,11 @@ If libopencm3 isn't in PlatformIO's usual place, pass `-DLIBOPENCM3_INCLUDE=<pat
 | Test | Runs | Checks |
 |---|---|---|
 | `uart_rx_overrun` | `uart.cpp` | Over 4 million steps with a model of the circular DMA, no data is lost without an overrun being reported, and no overrun is reported without data being lost. Also that bytes arriving while a copy runs are reported as an overrun only if they overwrite the first byte before the copy has read it. |
-| `uart_line_coding` | `uart.cpp` | When a line coding change takes effect, that received data is masked by the data bits it arrived with, and that a request changing nothing leaves the USART alone. |
+| `uart_line_coding` | `uart.cpp` | When a line coding change takes effect, including that it waits for the last byte to leave the USART, that received data is masked by the data bits it arrived with, that a request changing nothing leaves the USART alone, and that `enable()` always applies the default settings. |
 | `usb_serial_state` | `usb_serial.cpp`, `uart.cpp` | What *SerialState* notifications contain, that one refused by the USB stack stays pending, and that one dropped before the host collects it is sent again. |
-| `usb_cdc_requests` | `usb_cdc.cpp` | That CDC class requests are only accepted while the device is configured. |
-| `qsb_driver_halt` | `qsb_drv_fsdev_plus.c` | Setting and clearing an endpoint halt: the data toggles, that nothing but the host ends a halt, and that no packets are read during one. |
-| `qsb_standard_requests` | `qsb_standard.c` | String descriptor reads of every length, and GET_STATUS on interfaces. |
+| `usb_cdc_requests` | `usb_cdc.cpp` | That CDC class requests are only accepted while the device is configured, and that their direction is checked when they have a data stage. |
+| `qsb_driver_halt` | `qsb_drv_fsdev_plus.c` | Setting and clearing an endpoint halt: the data toggles, that nothing but the host ends a halt, and that no packets are read during one. Also that EP0 doesn't submit a packet for a transfer that a waiting SETUP has ended, and that resetting the endpoints disables them. |
+| `qsb_standard_requests` | `qsb_standard.c` | String descriptor reads of every length, GET_STATUS, GET_INTERFACE and SET_INTERFACE on interfaces, and that the direction of a request is only checked when it has a data stage. |
 
 ## What they don't cover
 
