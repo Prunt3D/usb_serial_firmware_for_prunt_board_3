@@ -214,6 +214,11 @@ invalid_param:
 void usb_serial_impl::set_control_line_state(uint16_t state)
 {
     (void)state;
+
+    // Hosts send this when they open the port. A host driver bound again without a new
+    // configuration, as cdc_acm can be, starts with DCD and DSR off and waits for a notification,
+    // so send the serial state again for the hosts that wait for DCD.
+    last_serial_state = 0;
 }
 
 uint16_t usb_serial_impl::serial_state()

@@ -103,19 +103,39 @@ int main()
     usb_serial.poll();
     check("  and only once after it's collected", notification_count == 5);
 
+    // Opening the port sends the state again, for a host driver that has forgotten it
+    usb_serial.set_control_line_state(3);
+    usb_serial.poll();
+    check("SET_CONTROL_LINE_STATE sends the state again", notification_count == 6 && last_notification[8] == 0x03);
+    collect_notification();
+    usb_serial.poll();
+    check("  and only once", notification_count == 6);
+    usb_serial.set_control_line_state(3);
+    usb_serial.poll();
+    check("  and again for each request", notification_count == 7);
+    usb_serial.set_control_line_state(0);
+    usb_serial.poll();
+    check("  while one is still queued, the next waits", notification_count == 7);
+    collect_notification();
+    usb_serial.poll();
+    check("  and goes out once that one has been collected", notification_count == 8 && last_notification[8] == 0x03);
+    collect_notification();
+    usb_serial.poll();
+    check("  and only once", notification_count == 8);
+
     // A new configuration starts over
     usb_serial.on_usb_configured();
     is_notification_queued = false;
     usb_serial.send_serial_state();
-    check("a new configuration sends the state again", notification_count == 6 && last_notification[8] == 0x03);
+    check("a new configuration sends the state again", notification_count == 9 && last_notification[8] == 0x03);
 
     // Even if dropping it leaves nothing but DCD and DSR to report
     is_notification_queued = false;
     usb_serial.poll();
-    check("  and the state is sent again if that's dropped", notification_count == 7 && last_notification[8] == 0x03);
+    check("  and the state is sent again if that's dropped", notification_count == 10 && last_notification[8] == 0x03);
     collect_notification();
     usb_serial.poll();
-    check("  and only once after it's collected", notification_count == 7);
+    check("  and only once after it's collected", notification_count == 10);
 
     return check_result();
 }

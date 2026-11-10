@@ -63,7 +63,8 @@ public:
      * @brief Handles the control line state sent by the host.
      * 
      * This member function is called to process a SET_CONTROL_LINE_STATE request.
-     * The board has no control signals, so the state is ignored.
+     * The board has no control signals, so the state is ignored. Hosts send the request when they
+     * open the port, so the serial state is sent again.
      * 
      * @param state control line state, in format defined by USB CDC PSTN standard
      */
