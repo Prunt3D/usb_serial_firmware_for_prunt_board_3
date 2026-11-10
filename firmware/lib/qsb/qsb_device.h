@@ -387,15 +387,13 @@ uint16_t qsb_dev_ep_read_packet(qsb_device* device, uint8_t addr, uint8_t* buf, 
  * Pausing the endpoint is the signal for the host to hold back data until the endpoint
  * is unpaused.
  * 
- * If the buffer size specified when the endpoint was setup is equal to the maximum packet
- * size, pausing the endpoint will take immediate effect if it is called from within the
- * callback function. No further callbacks will be received until the endpoint is unpaused.
+ * If the buffer size specified when the endpoint was set up is equal to the maximum packet
+ * size, the endpoint answers with NAK straight away. If this function is called from outside
+ * the endpoint callback, a packet that had already arrived is still passed to the callback.
  * 
- * If a bigger buffer has been specified or the function is called from outside the callback,
- * further callbacks may arrive until the buffer is empty. If this function is called from
- * outside the endpoint callback, up to the buffer size of data can still arrive. If this
- * function is called from inside the endpoint callback, up to the buffer size minus the
- * maximum packet size of data can still arrive.
+ * If a bigger buffer has been specified, no further callbacks are received until the endpoint
+ * is unpaused. The hardware can still receive packets into the free buffers, and they wait
+ * there until then.
  * 
  * @param device USB device
  * @param addr endpoint address (of an OUT endpoint)
@@ -405,7 +403,9 @@ void qsb_dev_ep_pause(qsb_device* device, uint8_t addr);
 /**
  * @brief Unpauses the endpoint.
  * 
- * Clears the paused state so the endpoint continues to receive data.
+ * Clears the paused state so the endpoint continues to receive data. With a buffer bigger than
+ * the maximum packet size, packets that arrived during the pause are passed to the endpoint's
+ * callback from within this function, unless it's called from that callback.
  * 
  * @sa qsb_dev_ep_pause
  * 

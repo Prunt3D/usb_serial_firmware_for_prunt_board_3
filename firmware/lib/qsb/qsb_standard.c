@@ -338,7 +338,7 @@ static qsb_request_return_code get_configuration(
     return QSB_REQ_HANDLED;
 }
 
-// get the current alternative interface setting
+// select an alternative interface setting
 static qsb_request_return_code set_interface(
     qsb_device* dev, qsb_setup_data* req, __attribute__((unused)) uint8_t** buf, uint16_t* len)
 {
@@ -409,7 +409,7 @@ static qsb_request_return_code device_get_status(
     return QSB_REQ_HANDLED;
 }
 
-// get interface status (always returns 0)
+// get interface status (always 0 for an interface that exists)
 static qsb_request_return_code interface_get_status(
     qsb_device* dev, qsb_setup_data* req, uint8_t** buf, uint16_t* len)
 {

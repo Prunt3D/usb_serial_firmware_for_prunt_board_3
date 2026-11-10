@@ -347,8 +347,8 @@ void qsb_dev_ep_stall_set(qsb_device* dev, uint8_t addr, uint8_t stall)
         return;
     }
 
-    // On EP0, the peripheral sets the data toggles for each SETUP, and clearing them here would
-    // give the status stage of this same request the wrong one.
+    // On EP0, the peripheral sets the data toggles for each SETUP, and clearing DTOG_TX here would
+    // give the status stage of this same request the wrong one. DTOG_RX is left alone to match.
     if (is_tx) {
         qsb_ep_stat_tx_set(ep, stall ? USB_EP_STAT_TX_STALL : USB_EP_STAT_TX_NAK);
 
@@ -392,13 +392,8 @@ void qsb_dev_ep_pause(qsb_device* dev, uint8_t addr)
 
     case dbl_buf_ready_0:
     case dbl_buf_ready_1:
+        // Pausing works by not reading the buffers, so that the hardware NAKs once both are full.
         dev->ep_state_rx[ep] += 2;
-        //uint32_t reg = ep | USB_EP_KIND_DBL_BUF | USB_EP_TYPE_BULK | USB_EP_W0_BITS_MSK | (USB_EP_STAT_RX_NAK ^ USB_EP_STAT_RX_VALID);
-        // USB_EP_SW_BUF_RX needs to be toggled to make the change stick. It's toggled here, if this function is called outside
-        // an endpoint callback. Otherwise, it will be toggled by qsb_dev_poll() after the callback returns.
-        // if (dev->active_ep_callback != addr)
-        //     reg |= USB_EP_SW_BUF_RX;
-        //USB_EP(ep) = reg;
         break;
     }
 }
