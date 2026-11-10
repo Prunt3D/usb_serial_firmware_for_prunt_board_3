@@ -11,6 +11,8 @@
 
 static uint8_t last_notification[10];
 static int notification_count;
+static int data_packets;
+static int data_bytes;
 static bool refuse_notifications;
 static bool is_notification_queued;
 
@@ -36,6 +38,10 @@ uint16_t qsb_dev_ep_transmit_avail(qsb_device*, uint8_t addr)
 
 int qsb_dev_ep_transmit_packet(qsb_device*, uint8_t addr, const uint8_t* buf, int len)
 {
+    if (addr == 0x82) {
+        data_packets++;
+        data_bytes += len;
+    }
     if (addr == 0x83) {
         if (refuse_notifications || is_notification_queued)
             return -1;
@@ -122,6 +128,18 @@ int main()
     collect_notification();
     usb_serial.poll();
     check("  and only once", notification_count == 8);
+
+    // Received data fills both buffers of the double-buffered DATA IN endpoint in one pass
+    for (int i = 0; i < 200; i++)
+        uart.rx_buf[i] = (uint8_t)i;
+    stub_rx_cndtr = UART_RX_BUF_LEN - 200;
+    data_packets = data_bytes = 0;
+    usb_serial.poll();
+    check("200 bytes received go out as two full packets in one pass", data_packets == 2 && data_bytes == 128);
+    usb_serial.poll();
+    check("  and the rest goes out in the next", data_packets == 4 && data_bytes == 200);
+    usb_serial.poll();
+    check("  and nothing more after that", data_packets == 4);
 
     // A new configuration starts over
     usb_serial.on_usb_configured();

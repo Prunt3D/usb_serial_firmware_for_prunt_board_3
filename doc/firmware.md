@@ -23,7 +23,7 @@ When the DMA transfer is complete, it updates the ring buffer accordingly and if
 
 For UART reception, a permanent circular DMA transfer is set up copying received bytes into the receive ring buffer. `usb_serial_impl::poll()` is called very frequently from the loop in `main()`. It reads the DMA transfer state (number of bytes copied by DMA) to check for additional data that has been copied into the ring buffer.
 
-If data has arrived and if no outgoing USB operation is in progress, the data is put into the PMA buffers so it is transmitted when the host polls the device the next time. Once the data has been transmitted, the callback `usb_serial_impl::on_usb_data_transmitted()` is called.
+If data has arrived and the *data in* endpoint has a free buffer, the data is put into the PMA buffers so it is transmitted when the host polls the device the next time. The endpoint is double-buffered, and each pass fills both of its buffers if there's data for them. Once the data has been transmitted, the callback `usb_serial_impl::on_usb_data_transmitted()` is called.
 
 
 ## Flow control
@@ -38,7 +38,7 @@ When the transmission ring buffer is becoming full, the USB *data out* endpoint 
 
 ### Serial-to-USB path
 
-The sender on the UART can't be paused. The host can normally collect data faster than the UART delivers it, but if it falls behind, the receive ring buffer overruns. The firmware then discards the buffered data and reports an overrun to the host. This can happen at 6 Mbaud with heavy traffic in both directions, as they share the USB bus.
+The sender on the UART can't be paused. The host can normally collect data faster than the UART delivers it, but if it falls behind, the receive ring buffer overruns. The firmware then discards the buffered data and reports an overrun to the host. This can happen at 6 Mbaud with heavy traffic in both directions, as they share the USB bus: 6 Mbaud each way is close to all that full-speed USB can carry. That makes the time each pass of the main loop takes matter, so keep the data path short.
 
 When the host first reads from the *data in* endpoint after configuration, or after clearing a halt, it gets two empty packets. This is how the USB peripheral starts double buffering (see `dbl_buf_queued_tx()`).
 

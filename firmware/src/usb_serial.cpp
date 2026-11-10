@@ -114,32 +114,37 @@ void usb_serial_impl::poll()
     if (state != last_serial_state)
         notify_serial_state(state);
 
-    // In order to prevent the USB line from being flooded with packets
-    // to transmit a single byte, data is held back until a certain time
-    // has expired or a certain number of bytes has been accumulated.
-    // After a pause with no transmission, the next byte (or chunk of bytes)
-    // is immediately transmitted.
-    size_t len = uart.rx_data_len();
-    if (!needs_zlp && len == 0)
+    // The DATA IN endpoint is double-buffered, so fill both of its buffers if there's data for
+    // them, rather than leave the second empty until the next pass of the main loop. The UART
+    // can't be paused, so the sooner the host can collect data, the less the receive buffer fills.
+    for (int packets = 0; packets < 2; packets++) {
+        // In order to prevent the USB line from being flooded with packets
+        // to transmit a single byte, data is held back until a certain time
+        // has expired or a certain number of bytes has been accumulated.
+        // After a pause with no transmission, the next byte (or chunk of bytes)
+        // is immediately transmitted.
+        size_t len = uart.rx_data_len();
+        if (!needs_zlp && len == 0)
             return; // no data, no ZLP
-    if (!needs_zlp && len < TX_HOLDBACK_MAX_LEN && millis() - tx_timestamp < TX_HOLDBACK_MAX_TIME)
-        return; // wait for more data to arrive
+        if (!needs_zlp && len < TX_HOLDBACK_MAX_LEN && millis() - tx_timestamp < TX_HOLDBACK_MAX_TIME)
+            return; // wait for more data to arrive
 
-    uint16_t write_avail = qsb_dev_ep_transmit_avail(usb_device, DATA_IN_1);
-    if (write_avail == 0)
-        return; // DATA IN endpoint is busy
+        uint16_t write_avail = qsb_dev_ep_transmit_avail(usb_device, DATA_IN_1);
+        if (write_avail == 0)
+            return; // DATA IN endpoint is busy
 
-    tx_timestamp = millis();
+        tx_timestamp = millis();
 
-    uint8_t packet[TX_USB_BUF_SIZE] __attribute__((aligned(4)));
+        uint8_t packet[CDCACM_PACKET_SIZE] __attribute__((aligned(4)));
 
-    // Retrieve UART data
-    len = uart.copy_rx_data(packet, write_avail);
+        // Retrieve UART data
+        len = uart.copy_rx_data(packet, write_avail);
 
-    needs_zlp = len > 0 && len % CDCACM_PACKET_SIZE == 0;
+        needs_zlp = len > 0 && len % CDCACM_PACKET_SIZE == 0;
 
-    // Start transmission over USB
-    qsb_dev_ep_transmit_packet(usb_device, DATA_IN_1, packet, len);
+        // Start transmission over USB
+        qsb_dev_ep_transmit_packet(usb_device, DATA_IN_1, packet, len);
+    }
 }
 
 // Updates the NAK status of DATA_OUT_1
