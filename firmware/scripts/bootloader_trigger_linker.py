@@ -70,6 +70,31 @@ def _read_symbol_address(elf_path, symbol_names):
     )
 
 
+# Taking an interrupt stacks 8 words, and 4 more bytes if the stack has to be aligned to 8 for it.
+EXCEPTION_FRAME_SIZE = 36
+
+
+def _interrupt_handlers(elf_path):
+    """The interrupt handlers that the firmware defines, rather than libopencm3's defaults."""
+    output = _run_command(
+        [_tool_path("nm"), "--defined-only", str(elf_path)],
+        "reading ELF symbols",
+    )
+    addresses = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 3:
+            addresses[parts[-1]] = int(parts[0], 16)
+    defaults = {
+        addresses.get(name) for name in ("null_handler", "blocking_handler", "reset_handler")
+    }
+    return sorted(
+        name
+        for name, address in addresses.items()
+        if re.search(r"_(handler|isr)$", name) and address not in defaults
+    )
+
+
 def _stack_usage_results(elf_path, su_root):
     stack_usage_script = _stack_usage_script_path()
     if not stack_usage_script.exists():
@@ -106,15 +131,31 @@ def _report_maximum_stack_address(target, source, env):
         max_stack_usage, entry_function, stack_path = max(
             results, key=lambda result: result[0]
         )
+
+        # An interrupt can come at the deepest point. They all have the same priority, so only
+        # one can run at a time.
+        usage_of = {name: usage for usage, name, _ in results}
+        interrupt_usage = 0
+        interrupt_function = None
+        for handler in _interrupt_handlers(elf_path):
+            if handler not in usage_of:
+                raise RuntimeError(f"stack usage analysis has no result for {handler}")
+            if interrupt_function is None or usage_of[handler] > interrupt_usage:
+                interrupt_usage = usage_of[handler]
+                interrupt_function = handler
+        interrupt_stack = interrupt_usage + EXCEPTION_FRAME_SIZE if interrupt_function else 0
+
         ram_data_end = _read_symbol_address(elf_path, ["end", "_end", "_ebss"])
-        max_stack_address = _align_up(ram_data_end + max_stack_usage, 8)
+        max_stack_address = _align_up(ram_data_end + max_stack_usage + interrupt_stack, 8)
         ram_end = ram_origin + ram_size
         headroom = ram_end - max_stack_address
 
         print(
             "Maximum stack address: "
             f"0x{max_stack_address:08x} "
-            f"({max_stack_usage} bytes via {entry_function})"
+            f"({max_stack_usage} bytes via {entry_function}"
+            + (f", and {interrupt_stack} for {interrupt_function}" if interrupt_function else "")
+            + ")"
         )
         print(
             "RAM data end: "
