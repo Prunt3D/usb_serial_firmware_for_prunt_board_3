@@ -21,6 +21,15 @@ pio run
 
 The default environment is `genericSTM32F042C6`, the MCU on the Prunt Board 3. `platformio.ini` finds its board definition in the [support](../support) directory, so there's nothing to install for it.
 
+`platformio.ini` pins the platform, toolchain and libopencm3 versions, so every build uses the same packages. Change them there, not by updating PlatformIO's packages.
+
+
+### Builds on GitHub
+
+[`.github/workflows/build.yml`](../.github/workflows/build.yml) builds the firmware and runs the [native tests](../test/firmware-native/README.md) on every push and pull request. The firmware is kept as the run's `usb-serial-firmware` artifact. The workflow also compiles [`tools/enter-system-bootloader.c`](../tools/enter-system-bootloader.c).
+
+To make a release, push a tag named after the USB device release, `USB_DEVICE_REL` in [`src/usb_conf.cpp`](src/usb_conf.cpp). This is `bcdDevice`, which is binary-coded decimal, so `0x0200` is tag `v2.0.0`. The workflow stops if the tag doesn't match. Otherwise it makes a draft release with the `.bin` and `.elf` files, which you then publish on GitHub.
+
 
 ## Uploading the firmware
 

@@ -18,7 +18,7 @@
 
 #define USB_VID 0x0483
 #define USB_PID 0xA53B
-#define USB_DEVICE_REL 0x0100
+#define USB_DEVICE_REL 0x0200
 
 #define INTF_COMM 0 //  COMM must be immediately before DATA because of Associated Interface Descriptor.
 #define INTF_DATA 1

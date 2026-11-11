@@ -1,0 +1,99 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*.*.*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # platformio.ini pins the platform and its packages, so its hash is enough for the key.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.platformio
+          key: platformio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+
+      - run: pip install platformio==6.1.19
+
+      # The build also runs the stack usage check, which fails it if the stack can overflow RAM.
+      - name: Build firmware
+        run: pio run -d firmware
+
+      - name: Run native tests
+        run: |
+          cmake -S test/firmware-native -B test/firmware-native/build
+          cmake --build test/firmware-native/build
+          ctest --test-dir test/firmware-native/build --output-on-failure
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: usb-serial-firmware
+          path: |
+            firmware/.pio/build/genericSTM32F042C6/firmware.bin
+            firmware/.pio/build/genericSTM32F042C6/firmware.elf
+          if-no-files-found: error
+
+  bootloader-tool:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev
+
+      - name: Build enter-system-bootloader
+        run: >
+          cc -Wall -Wextra -Werror -O2 -o tools/enter-system-bootloader tools/enter-system-bootloader.c
+          $(pkg-config --cflags --libs libusb-1.0)
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [firmware, bootloader-tool]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # bcdDevice is BCD, so 0xJJMN is version JJ.M.N.
+      - name: Check the tag matches the USB device release
+        run: |
+          rel=$(sed -n 's/^#define USB_DEVICE_REL 0x\([0-9]\{4\}\)$/\1/p' firmware/src/usb_conf.cpp)
+          if [ -z "$rel" ]; then
+            echo "::error::No USB_DEVICE_REL found in firmware/src/usb_conf.cpp"
+            exit 1
+          fi
+          expected="v$((10#${rel:0:2})).${rel:2:1}.${rel:3:1}"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match USB_DEVICE_REL 0x$rel, which is $expected"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: usb-serial-firmware
+          path: artifact
+
+      - run: |
+          mv artifact/firmware.bin prunt_board_3_usb_serial_firmware.bin
+          mv artifact/firmware.elf prunt_board_3_usb_serial_firmware.elf
+
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: |
+            prunt_board_3_usb_serial_firmware.bin
+            prunt_board_3_usb_serial_firmware.elf
+          fail_on_unmatched_files: true
+          draft: true
